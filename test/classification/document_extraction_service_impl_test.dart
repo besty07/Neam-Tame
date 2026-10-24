@@ -183,6 +183,16 @@ void main() {
       expect(result.dateCandidates.single.isoDate, '2028-03-15');
     });
 
+    test('extracts warranty-period range end date with dot format', () {
+      final result = service.extract(
+        'Certificate of Warranty\nWarranty Period: from 05.09.2024 to 05.09.2027',
+      );
+
+      expect(result.dateCandidates, isNotEmpty);
+      expect(result.dateCandidates.single.rawText, '05.09.2027');
+      expect(result.dateCandidates.single.fieldKind, DateFieldKind.expiry);
+    });
+
     test('marks ambiguous numeric dates but does not normalize them', () {
       final result = service.extract('Due Date: 01/02/2028');
 

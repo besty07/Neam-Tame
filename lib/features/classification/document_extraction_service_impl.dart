@@ -159,7 +159,7 @@ class LifeVaultDocumentExtractionService implements DocumentExtractionService {
   };
 
   static final RegExp _dateToken = RegExp(
-    r'\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{2,4})\b',
+    r'\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{2,4})\b',
     caseSensitive: false,
   );
 
@@ -174,7 +174,7 @@ class LifeVaultDocumentExtractionService implements DocumentExtractionService {
     ),
     _DateLabel(
       RegExp(
-        r'\b(?:warranty\s*(?:ends?|end\s*date|valid\s*(?:until|upto|till))|warranty\s*expiry)\b',
+        r'\b(?:warranty\s*(?:ends?|end\s*date|valid\s*(?:until|upto|till)|period(?:\s*from.*?\s*to|\s*to)?)|warranty\s*expiry)\b',
         caseSensitive: false,
       ),
       DateFieldKind.expiry,
@@ -276,7 +276,15 @@ class LifeVaultDocumentExtractionService implements DocumentExtractionService {
         if (labelMatch == null) {
           continue;
         }
-        final match = _dateToken.firstMatch(snippet.substring(labelMatch.end));
+        final afterLabel = snippet.substring(labelMatch.end);
+        final toMatch = RegExp(
+          r'\bto\s+([0-9/.-]+|\d{1,2}\s+[a-z]+\s+\d{2,4})',
+          caseSensitive: false,
+        ).firstMatch(afterLabel);
+        final rawMatch = toMatch != null
+            ? _dateToken.firstMatch(toMatch.group(0)!)
+            : null;
+        final match = rawMatch ?? _dateToken.firstMatch(afterLabel);
         if (match == null) {
           continue;
         }
@@ -375,7 +383,7 @@ class LifeVaultDocumentExtractionService implements DocumentExtractionService {
     }
 
     final numeric =
-        RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$').firstMatch(compact);
+        RegExp(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$').firstMatch(compact);
     if (numeric == null) {
       return null;
     }
@@ -389,7 +397,7 @@ class LifeVaultDocumentExtractionService implements DocumentExtractionService {
 
   bool _looksAmbiguousOrTwoDigitYear(String raw) {
     final numeric =
-        RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$').firstMatch(raw);
+        RegExp(r'^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$').firstMatch(raw);
     if (numeric != null) {
       if (numeric.group(3)!.length == 2) {
         return true;
