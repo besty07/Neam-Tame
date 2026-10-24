@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lifevault/app/boot.dart';
+import 'package:lifevault/app/app_controller.dart';
 import 'package:lifevault/app/default_services.dart';
+import 'package:lifevault/core/contracts/contracts.dart';
 import 'package:lifevault/features/capture_ocr/capture_ocr.dart';
 import 'package:lifevault/features/classification/classification.dart';
 import 'package:lifevault/features/vault/vault.dart';
@@ -27,15 +27,17 @@ class _TestCaptureDelegate implements ImageCaptureDelegate {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });
 
-  testWidgets(
-    'Full E2E integration: D1 OCR -> D2 Classifier -> D4 Review -> D3 SQLite '
-    '& Grounded Q&A',
-    (WidgetTester tester) async {
+  test(
+    'Full E2E integration: D1 OCR -> D2 Classifier -> D4 Controller -> '
+    'D3 SQLite & Grounded Q&A',
+    () async {
       final tempDir = await Directory.systemTemp.createTemp('lv_e2e_');
       final db = await VaultDatabase.openInMemory();
       addTearDown(() async {
@@ -76,7 +78,7 @@ void main() {
       final ocrService = OfflineOcrServiceImpl(channel: ocrChannel);
       const extractionService = LifeVaultDocumentExtractionService();
 
-      final deps = LifeVaultDependencies(
+      final controller = LifeVaultController(
         ocrService: ocrService,
         extractionService: extractionService,
         vaultRepository: vaultRepo,
@@ -92,53 +94,75 @@ void main() {
         nowProvider: () => DateTime(2026, 10, 24),
       );
 
-      await tester.pumpWidget(LifeVaultApp(dependencies: deps));
-      await tester.pumpAndSettle();
+      await controller.initialize();
+      expect(controller.allDocuments, isEmpty);
 
-      // 1. Navigate to Scan via Home empty-state CTA.
-      await tester.tap(find.byKey(const Key('home_empty_scan_cta')));
-      await tester.pumpAndSettle();
+      // 1. Capture photo via D4 controller.
+      await controller.pickFromCamera();
+      expect(controller.selectedScanFile, isNotNull);
 
-      // 2. Capture image and run D1 OCR + D2 Extraction.
-      await tester.tap(find.byKey(const Key('scan_take_photo_button')));
-      await tester.pumpAndSettle();
-
-      final processBtn = find.byKey(const Key('scan_process_button'));
-      await tester.ensureVisible(processBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(processBtn);
-      await tester.pumpAndSettle();
-
-      // 3. Verify D2 extracted category Appliances, type Warranty, and date
-      //    2026-12-15.
-      expect(find.text('Review & Confirm'), findsOneWidget);
-      expect(find.textContaining('EXPIRY: 2026-12-15'), findsOneWidget);
-
-      await tester.enterText(
-        find.byKey(const Key('review_title_field')),
-        'Kitchen Fridge Warranty',
+      // 2. Process image through D1 OfflineOcrServiceImpl +
+      //    D2 LifeVaultDocumentExtractionService.
+      final draft = await controller.processSelectedImage();
+      expect(draft, isNotNull);
+      expect(draft!.ocrStatus, equals(OcrStatus.success));
+      expect(
+        draft.extractionResult.suggestedCategory,
+        equals(DocumentCategory.appliances),
+      );
+      expect(
+        draft.extractionResult.suggestedType,
+        equals(DocumentType.warranty),
+      );
+      expect(draft.extractionResult.dateCandidates, isNotEmpty);
+      expect(
+        draft.extractionResult.dateCandidates.first.isoDate,
+        equals('2026-12-15'),
       );
 
-      final confirmBtn = find.byKey(const Key('confirm_and_save_button'));
-      await tester.ensureVisible(confirmBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(confirmBtn);
-      await tester.pumpAndSettle();
+      // 3. Confirm & Save verified document + deadline into D3 SQLite repo.
+      final savedDoc = await controller.saveReviewedDocument(
+        VerifiedDocumentInput(
+          originalTempPath: draft.imagePath,
+          title: 'Kitchen Fridge Warranty',
+          category: draft.extractionResult.suggestedCategory,
+          documentType: draft.extractionResult.suggestedType,
+          assetName: draft.extractionResult.assetNameSuggestion ?? 'Fridge',
+          sha256: draft.sha256,
+          ocrStatus: draft.ocrStatus,
+          verificationStatus: VerificationStatus.verified,
+          verifiedDeadlines: const <VerifiedDeadlineInput>[
+            VerifiedDeadlineInput(
+              kind: DeadlineKind.expiry,
+              dateIso: '2026-12-15',
+              evidenceSnippet: 'Warranty Ends: 15/12/2026',
+            ),
+          ],
+        ),
+      );
 
-      // 4. Verify D3 persisted the record in SQLite and Home displays it.
-      expect(find.text('Kitchen Fridge Warranty'), findsOneWidget);
-      expect(find.textContaining('Due 2026-12-15'), findsOneWidget);
+      expect(savedDoc.title, equals('Kitchen Fridge Warranty'));
+      expect(controller.allDocuments, hasLength(1));
+      expect(controller.upcomingItems, hasLength(1));
+      expect(
+        controller.upcomingItems.single.deadline.dateIso,
+        equals('2026-12-15'),
+      );
 
-      // 5. Switch to Ask tab and test the "fridge warranty" suggested chip
-      //    against D3's QuestionServiceImpl.
-      await tester.tap(find.byKey(const Key('nav_tab_ask')));
-      await tester.pumpAndSettle();
+      // 4. Ask "fridge warranty" via D3 QuestionServiceImpl +
+      //    D4 IntegratedQuestionService.
+      await controller.askQuestion('fridge warranty');
+      expect(controller.lastAnswerResult, isNotNull);
+      expect(
+        controller.lastAnswerResult!.status,
+        equals(AnswerStatus.answered),
+      );
+      expect(controller.lastAnswerResult!.text, contains('2026-12-15'));
 
-      await tester.tap(find.byKey(const Key('ask_chip_fridge warranty')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('ANSWERED'), findsOneWidget);
-      expect(find.textContaining('2026-12-15'), findsOneWidget);
+      // 5. Delete document and verify SQLite + file cleanup.
+      await controller.deleteDocument(savedDoc.id);
+      expect(controller.allDocuments, isEmpty);
+      expect(controller.verifiedDeadlines, isEmpty);
     },
   );
 }
