@@ -1,0 +1,20 @@
+{
+  "description": "Synthetic integration example only; all values are proposals and require user confirmation.",
+  "suggestedCategory": "insurance",
+  "suggestedType": "insurance_policy",
+  "categoryEvidence": "Keyword evidence: insurance policy, policy period (score 9).",
+  "typeEvidence": "Keyword evidence: insurance policy, policy period (score 11).",
+  "assetNameSuggestion": "Bike",
+  "dateCandidates": [
+    {
+      "fieldKind": "expiry",
+      "rawText": "24 Nov 2028",
+      "isoDate": "2028-11-24",
+      "sourceSnippet": "Policy Period To: 24 Nov 2028",
+      "page": 1,
+      "ambiguous": false,
+      "isDerived": false,
+      "confidenceLevel": "high"
+    }
+  ]
+}
