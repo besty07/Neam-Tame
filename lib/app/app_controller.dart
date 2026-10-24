@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/contracts/contracts.dart';
+import '../features/vault/vault.dart';
 import 'default_services.dart';
 
 /// Draft state passed into `ReviewScreen` from `ScanScreen` or from an
@@ -57,6 +60,77 @@ class LifeVaultController extends ChangeNotifier {
   }
 
   static const int maxImageBytes = 12 * 1024 * 1024;
+
+  // Minimal valid 1x1 PNG used when a manual entry is saved without a photo.
+  static const List<int> _manualPlaceholderPng = <int>[
+    0x89,
+    0x50,
+    0x4E,
+    0x47,
+    0x0D,
+    0x0A,
+    0x1A,
+    0x0A,
+    0x00,
+    0x00,
+    0x00,
+    0x0D,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x08,
+    0x06,
+    0x00,
+    0x00,
+    0x00,
+    0x1F,
+    0x15,
+    0xC4,
+    0x89,
+    0x00,
+    0x00,
+    0x00,
+    0x0A,
+    0x49,
+    0x44,
+    0x41,
+    0x54,
+    0x78,
+    0x9C,
+    0x63,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x05,
+    0x00,
+    0x01,
+    0x0D,
+    0x0A,
+    0x2D,
+    0xB4,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x49,
+    0x45,
+    0x4E,
+    0x44,
+    0xAE,
+    0x42,
+    0x60,
+    0x82,
+  ];
 
   final OfflineOcrService ocrService;
   final DocumentExtractionService extractionService;
@@ -368,10 +442,10 @@ class LifeVaultController extends ChangeNotifier {
 
   PendingReviewDraft createManualEntryDraft() {
     final picked = _selectedScanFile;
+    final stamp = _nowProvider().microsecondsSinceEpoch;
     return PendingReviewDraft(
-      imagePath: picked?.path ?? 'manual_entry_local',
-      sha256:
-          picked?.sha256 ?? 'manual_${_nowProvider().millisecondsSinceEpoch}',
+      imagePath: picked?.path ?? 'manual_entry_$stamp.png',
+      sha256: picked?.sha256 ?? 'manual_sha256_$stamp',
       ocrStatus: OcrStatus.manual,
       extractionResult: const ExtractionResult(),
     );
@@ -398,38 +472,96 @@ class LifeVaultController extends ChangeNotifier {
     VerifiedDocumentInput input, {
     String? existingDocumentId,
   }) async {
-    if (existingDocumentId != null) {
-      await reminderService.cancelForDocument(existingDocumentId);
-    }
+    File? tempStagedFile;
+    String effectiveTempPath = input.originalTempPath;
 
-    final saved = await vaultRepository.saveVerified(input);
-    await refreshVault();
-
-    final savedDeadlines = _verifiedDeadlines
-        .where((d) => d.documentId == saved.id && d.isVerified)
-        .toList();
-
-    if (savedDeadlines.isNotEmpty) {
-      final scheduleResult = await reminderService.schedule(
-        savedDeadlines.first,
-      );
-      if (!scheduleResult.permissionGranted) {
-        _statusBannerMessage = scheduleResult.statusMessage ??
-            'Saved to vault. Android notification permission is denied, so '
-                'check the Home dashboard for deadline alerts.';
-      } else {
-        _statusBannerMessage = scheduleResult.statusMessage ??
-            'Document and verified deadline reminder saved locally.';
+    try {
+      final originalFile = File(input.originalTempPath);
+      if (existingDocumentId != null) {
+        await reminderService.cancelForDocument(existingDocumentId);
+        if (originalFile.existsSync()) {
+          final stagedPath =
+              '${Directory.systemTemp.path}/lv_edit_$existingDocumentId.jpg';
+          tempStagedFile = await originalFile.copy(stagedPath);
+          effectiveTempPath = tempStagedFile.path;
+        }
+        await vaultRepository.deleteDocument(existingDocumentId);
       }
-    } else {
-      _statusBannerMessage = 'Document saved locally without a deadline.';
-    }
 
-    _selectedScanFile = null;
-    _duplicateExistingDoc = null;
-    _scanErrorMessage = null;
-    notifyListeners();
-    return saved;
+      if (vaultRepository is VaultRepositoryImpl &&
+          !File(effectiveTempPath).existsSync()) {
+        final stamp = _nowProvider().microsecondsSinceEpoch;
+        final fallbackPath =
+            '${Directory.systemTemp.path}/lv_manual_$stamp.png';
+        tempStagedFile = File(fallbackPath);
+        await tempStagedFile.writeAsBytes(_manualPlaceholderPng, flush: true);
+        effectiveTempPath = tempStagedFile.path;
+      }
+
+      String? effectiveSha256 = input.sha256;
+      if (vaultRepository is VaultRepositoryImpl &&
+          effectiveSha256 != null &&
+          existingDocumentId == null) {
+        final duplicate = await vaultRepository.findDocumentBySha256(
+          effectiveSha256,
+        );
+        if (duplicate != null) {
+          final stamp = _nowProvider().microsecondsSinceEpoch;
+          effectiveSha256 = '${effectiveSha256}_copy_$stamp';
+        }
+      }
+
+      final normalizedInput = VerifiedDocumentInput(
+        originalTempPath: effectiveTempPath,
+        title: input.title,
+        category: input.category,
+        documentType: input.documentType,
+        assetName: input.assetName,
+        tags: input.tags,
+        sha256: effectiveSha256,
+        ocrStatus: input.ocrStatus,
+        verificationStatus: input.verificationStatus,
+        verifiedDeadlines: input.verifiedDeadlines,
+        evidenceRecords: input.evidenceRecords,
+      );
+
+      final saved = await vaultRepository.saveVerified(normalizedInput);
+      await refreshVault();
+
+      final savedDeadlines = _verifiedDeadlines
+          .where((d) => d.documentId == saved.id && d.isVerified)
+          .toList();
+
+      if (savedDeadlines.isNotEmpty) {
+        final scheduleResult = await reminderService.schedule(
+          savedDeadlines.first,
+        );
+        if (!scheduleResult.permissionGranted) {
+          _statusBannerMessage = scheduleResult.statusMessage ??
+              'Saved to vault. Android notification permission is denied, so '
+                  'check the Home dashboard for deadline alerts.';
+        } else {
+          _statusBannerMessage = scheduleResult.statusMessage ??
+              'Document and verified deadline reminder saved locally.';
+        }
+      } else {
+        _statusBannerMessage = 'Document saved locally without a deadline.';
+      }
+
+      _selectedScanFile = null;
+      _duplicateExistingDoc = null;
+      _scanErrorMessage = null;
+      notifyListeners();
+      return saved;
+    } finally {
+      if (tempStagedFile != null && tempStagedFile.existsSync()) {
+        try {
+          tempStagedFile.deleteSync();
+        } on Object {
+          // Ignore temporary file cleanup errors.
+        }
+      }
+    }
   }
 
   Future<ReminderScheduleResult> scheduleReminderForDeadline(
