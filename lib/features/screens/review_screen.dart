@@ -48,8 +48,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
     _selectedCategory = existing?.category ?? extraction.suggestedCategory;
     _selectedType = existing?.documentType ?? extraction.suggestedType;
 
-    final initialTitle =
-        existing?.title ?? _defaultTitleFor(_selectedCategory, _selectedType);
+    final proposedTitle = widget.draft.proposedTitle?.trim();
+    final initialTitle = existing?.title ??
+        ((proposedTitle != null && proposedTitle.isNotEmpty)
+            ? proposedTitle
+            : _defaultTitleFor(_selectedCategory, _selectedType));
     _titleController = TextEditingController(text: initialTitle);
     _assetController = TextEditingController(
       text: existing?.assetName ??
@@ -334,7 +337,62 @@ class _ReviewScreenState extends State<ReviewScreen> {
     ExtractionResult extraction,
     List<DateCandidate> candidates,
   ) {
+    final warnings = widget.draft.warnings;
     return <Widget>[
+      if (widget.draft.usedGemmaVision) ...<Widget>[
+        Container(
+          key: const Key('review_gemma_unverified_banner'),
+          child: _buildAlertBanner(
+            icon: Icons.auto_awesome_outlined,
+            color: LifeVaultColors.primary,
+            backgroundColor: LifeVaultColors.primaryLight,
+            text:
+                'Gemma 3n E4B Vision Proposal (Needs Review): Verify every extracted field, evidence quote, and date against the source image before saving.',
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (warnings.isNotEmpty) ...<Widget>[
+        Card(
+          key: const Key('review_extraction_warnings_card'),
+          color: LifeVaultColors.warningBackground,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: LifeVaultColors.warning,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Extraction Warnings — Verify Against Original Image',
+                        style: TextStyle(
+                          color: LifeVaultColors.warning,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ...warnings.map(
+                  (w) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $w'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
       if (widget.draft.ocrErrorMessage != null) ...<Widget>[
         _buildAlertBanner(
           icon: Icons.warning_amber_rounded,
@@ -424,7 +482,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ),
                 ),
                 Chip(
-                  label: Text('OCR: ${widget.draft.ocrStatus.wireName}'),
+                  label: Text(
+                    widget.draft.usedGemmaVision
+                        ? 'Gemma 3n: needs_review'
+                        : 'OCR: ${widget.draft.ocrStatus.wireName}',
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -465,6 +527,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Widget _buildMetadataSection(ExtractionResult extraction) {
+    final proposedAmount = widget.draft.proposedAmount;
+    final proposedRef = widget.draft.proposedReferenceNumber;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -485,6 +549,27 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: LifeVaultColors.textSecondary,
                     ),
+              ),
+            ],
+            if (proposedAmount != null || proposedRef != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: <Widget>[
+                  if (proposedRef != null)
+                    Chip(
+                      key: const Key('review_proposed_ref_chip'),
+                      label: Text('Ref / ID: $proposedRef'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (proposedAmount != null)
+                    Chip(
+                      key: const Key('review_proposed_amount_chip'),
+                      label: Text('Amount: $proposedAmount'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
               ),
             ],
             const SizedBox(height: 12),

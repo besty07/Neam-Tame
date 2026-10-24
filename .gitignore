@@ -1,5 +1,5 @@
 # =============================================================================
-# LifeVault v0.1 — Privacy-First & Flutter .gitignore (Owned by Dev 4)
+# LifeVault v0.1 / v0.2 — Privacy-First & Flutter .gitignore (Owned by Dev 4)
 # =============================================================================
 
 # Flutter / Dart / Pub build & tool artifacts
@@ -71,8 +71,14 @@ vault_storage/
 !assets/tessdata/eng.traineddata
 !assets/tessdata/.gitkeep
 
-# Ignore large GGUF / binary LLM weights to prevent repository bloat
+# Ignore large GGUF / LiteRT-LM / MediaPipe model binaries (NEVER commit to Git)
+*.gguf
+*.litertlm
+*.task
+*.bin
 assets/models/*.gguf
+assets/models/*.litertlm
+assets/models/*.task
 assets/models/*.bin
 !assets/models/.gitkeep
 

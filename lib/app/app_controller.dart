@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/contracts/contracts.dart';
 import '../features/action_guide/action_guide.dart';
+import '../features/gemma_vision/gemma_vision.dart';
 import '../features/vault/vault.dart';
 import 'default_services.dart';
 
@@ -57,6 +58,11 @@ class PendingReviewDraft {
     this.existingDeadlines = const <DeadlineRecord>[],
     this.ocrErrorMessage,
     this.initialAssetName,
+    this.warnings = const <String>[],
+    this.proposedTitle,
+    this.proposedAmount,
+    this.proposedReferenceNumber,
+    this.usedGemmaVision = false,
   });
 
   final String imagePath;
@@ -67,6 +73,11 @@ class PendingReviewDraft {
   final List<DeadlineRecord> existingDeadlines;
   final String? ocrErrorMessage;
   final String? initialAssetName;
+  final List<String> warnings;
+  final String? proposedTitle;
+  final String? proposedAmount;
+  final String? proposedReferenceNumber;
+  final bool usedGemmaVision;
 }
 
 /// View-model item pairing a verified [DeadlineRecord] with its parent
@@ -97,9 +108,13 @@ class LifeVaultController extends ChangeNotifier {
     required this.reminderService,
     required this.captureDelegate,
     ActionGuideService? actionGuideService,
+    GemmaVisionExtractionService? gemmaVisionService,
+    this.visionExtractionService,
     DateTime Function()? nowProvider,
     this.isPersistentStorage = false,
-  }) : actionGuideService = actionGuideService ?? HybridActionGuideService() {
+  })  : actionGuideService = actionGuideService ?? HybridActionGuideService(),
+        gemmaVisionService =
+            gemmaVisionService ?? GemmaVisionExtractionService() {
     _nowProvider = nowProvider ?? DateTime.now;
     if (reminderService is ReminderServiceImpl) {
       (reminderService as ReminderServiceImpl)
@@ -116,6 +131,8 @@ class LifeVaultController extends ChangeNotifier {
   final ReminderService reminderService;
   final ImageCaptureDelegate captureDelegate;
   final ActionGuideService actionGuideService;
+  final GemmaVisionExtractionService gemmaVisionService;
+  final VisionDocumentExtractionService? visionExtractionService;
   final bool isPersistentStorage;
   late final DateTime Function() _nowProvider;
 
@@ -123,6 +140,15 @@ class LifeVaultController extends ChangeNotifier {
   bool _isLoadingVault = false;
   bool _isProcessingScan = false;
   int _scanOperationToken = 0;
+
+  VisionModelState _visionModelState = VisionModelState.modelMissing;
+  VisionModelStatus _visionModelStatus = const VisionModelStatus(
+    state: VisionModelState.modelMissing,
+    available: false,
+    message:
+        'Gemma 3n E4B model not provisioned. Using offline OCR + manual review fallback.',
+  );
+  List<String> _lastExtractionWarnings = const <String>[];
 
   List<DocumentRecord> _allDocuments = <DocumentRecord>[];
   List<DocumentRecord> _filteredDocuments = <DocumentRecord>[];
@@ -161,6 +187,9 @@ class LifeVaultController extends ChangeNotifier {
   int get activeTabIndex => _activeTabIndex;
   bool get isLoadingVault => _isLoadingVault;
   bool get isProcessingScan => _isProcessingScan;
+  VisionModelState get visionModelState => _visionModelState;
+  VisionModelStatus get visionModelStatus => _visionModelStatus;
+  List<String> get lastExtractionWarnings => _lastExtractionWarnings;
 
   List<DocumentRecord> get allDocuments => _allDocuments;
   List<DocumentRecord> get filteredDocuments => _filteredDocuments;
@@ -420,13 +449,45 @@ class LifeVaultController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<VisionModelStatus> refreshVisionModelStatus() async {
+    final status = await gemmaVisionService.getModelStatus();
+    _visionModelStatus = status;
+    _visionModelState = status.state;
+    notifyListeners();
+    return status;
+  }
+
+  Future<VisionModelStatus> importVisionModelFromPath(String sourcePath) async {
+    _visionModelState = VisionModelState.loadingModel;
+    notifyListeners();
+    final status = await gemmaVisionService.importLocalModel(sourcePath);
+    _visionModelStatus = status;
+    _visionModelState = status.state;
+    _statusBannerMessage = status.message;
+    notifyListeners();
+    return status;
+  }
+
+  Future<void> unloadVisionModel() async {
+    await gemmaVisionService.unloadModel();
+    final status = await gemmaVisionService.getModelStatus();
+    _visionModelStatus = status;
+    _visionModelState = status.state;
+    _statusBannerMessage =
+        'Gemma 3n vision session unloaded from memory. Offline OCR fallback remains active.';
+    notifyListeners();
+  }
+
   Future<void> checkLocalServices() async {
     await refreshVault();
+    final visionStatus = await refreshVisionModelStatus();
     final storageLabel = isPersistentStorage
         ? 'SQLite App-Private Storage Ready'
         : 'Local Session Vault Ready';
-    _lastServiceCheckSummary =
-        '$storageLabel • Offline OCR Engine (eng.traineddata) Configured • '
+    final visionLabel = visionStatus.available
+        ? 'Gemma 3n E4B Vision Ready'
+        : 'Offline OCR Engine (eng.traineddata) Configured (${visionStatus.state.displayName})';
+    _lastServiceCheckSummary = '$storageLabel • $visionLabel • '
         '${_allDocuments.length} document(s), ${_verifiedDeadlines.length} verified deadline(s).';
     _statusBannerMessage = _lastServiceCheckSummary;
     notifyListeners();
@@ -504,7 +565,13 @@ class LifeVaultController extends ChangeNotifier {
       final docDeadlines = deadlinesForDocument(documentId);
       final primaryDeadline =
           docDeadlines.isNotEmpty ? docDeadlines.first : null;
-      final playbook = await actionGuideService.generatePlaybook(
+      // Section 5.3 ("Do Not Run Qwen and Gemma Together"): when Gemma 3n
+      // Vision is active on a 6 GB device, use the deterministic Action Guide
+      // so two LLM runtimes never compete for RAM.
+      final effectiveActionGuide = _visionModelStatus.available
+          ? const DeterministicActionGuideService()
+          : actionGuideService;
+      final playbook = await effectiveActionGuide.generatePlaybook(
         document: doc,
         deadline: primaryDeadline,
         evidenceSnippet: primaryDeadline?.evidenceSnippet,
@@ -701,9 +768,53 @@ class LifeVaultController extends ChangeNotifier {
     final currentToken = ++_scanOperationToken;
     _isProcessingScan = true;
     _scanErrorMessage = null;
+    _lastExtractionWarnings = const <String>[];
     notifyListeners();
 
     try {
+      final fallbackWarnings = <String>[];
+
+      // 1. Attempt Gemma 3n Vision / custom VisionDocumentExtractionService
+      //    when configured or when a local Gemma 3n model is ready.
+      final status = await gemmaVisionService.getModelStatus();
+      _visionModelStatus = status;
+      if (visionExtractionService != null ||
+          (status.available && status.state == VisionModelState.ready)) {
+        _visionModelState = VisionModelState.analyzing;
+        notifyListeners();
+
+        final activeVisionExtractor =
+            visionExtractionService ?? gemmaVisionService;
+        final visionDraft = await activeVisionExtractor.extractImage(file.path);
+        if (currentToken != _scanOperationToken) {
+          return null;
+        }
+
+        if (visionDraft.usedGemmaVision || visionExtractionService != null) {
+          _visionModelState = VisionModelState.needsReview;
+          _lastExtractionWarnings = visionDraft.warnings;
+          _isProcessingScan = false;
+          notifyListeners();
+          return PendingReviewDraft(
+            imagePath: file.path,
+            sha256: file.sha256,
+            ocrStatus: OcrStatus.success,
+            extractionResult: visionDraft.toExtractionResult(),
+            warnings: visionDraft.warnings,
+            proposedTitle: visionDraft.title,
+            proposedAmount: visionDraft.amount,
+            proposedReferenceNumber: visionDraft.referenceNumber,
+            usedGemmaVision: visionDraft.usedGemmaVision,
+          );
+        }
+
+        fallbackWarnings.addAll(visionDraft.warnings);
+      } else {
+        _visionModelState = status.state;
+      }
+
+      // 2. Fallback / default path: offline Tesseract OCR + deterministic
+      //    keyword & date extraction.
       final ocrOutput = await ocrService.recognizeImage(file.path);
       if (currentToken != _scanOperationToken) {
         return null;
@@ -712,6 +823,7 @@ class LifeVaultController extends ChangeNotifier {
       if (!ocrOutput.isSuccess || ocrOutput.text.trim().isEmpty) {
         final fallbackNotice = ocrOutput.errorMessage ??
             'No printed text recognized. Enter fields manually in Review.';
+        _lastExtractionWarnings = fallbackWarnings;
         _isProcessingScan = false;
         notifyListeners();
         return PendingReviewDraft(
@@ -720,10 +832,12 @@ class LifeVaultController extends ChangeNotifier {
           ocrStatus: OcrStatus.failed,
           extractionResult: const ExtractionResult(),
           ocrErrorMessage: fallbackNotice,
+          warnings: fallbackWarnings,
         );
       }
 
       final extraction = extractionService.extract(ocrOutput.text);
+      _lastExtractionWarnings = fallbackWarnings;
       _isProcessingScan = false;
       notifyListeners();
       return PendingReviewDraft(
@@ -731,6 +845,7 @@ class LifeVaultController extends ChangeNotifier {
         sha256: file.sha256,
         ocrStatus: OcrStatus.success,
         extractionResult: extraction,
+        warnings: fallbackWarnings,
       );
     } on Object catch (error) {
       if (currentToken != _scanOperationToken) {

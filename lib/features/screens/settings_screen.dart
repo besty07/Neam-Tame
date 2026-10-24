@@ -7,9 +7,10 @@ import 'welcome_screen.dart';
 /// Settings & Privacy screen (`/settings` P1 spec).
 ///
 /// Gives users transparent control over privacy, local processing status,
-/// vault storage statistics, reminder preferences, and appearance theme mode.
+/// optional Gemma 3n E4B Vision model provisioning, vault storage statistics,
+/// reminder preferences, and appearance theme mode.
 /// Never advertises unverified encryption, cloud backup, or biometric locks.
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     required this.controller,
@@ -17,21 +18,41 @@ class SettingsScreen extends StatelessWidget {
 
   final LifeVaultController controller;
 
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final TextEditingController _modelPathController = TextEditingController();
+
+  @override
+  void dispose() {
+    _modelPathController.dispose();
+    super.dispose();
+  }
+
   Future<void> _openOnboarding(BuildContext context) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (context) => WelcomeScreen(controller: controller),
+        builder: (context) => WelcomeScreen(controller: widget.controller),
       ),
     );
   }
 
+  Future<void> _importLocalModel() async {
+    final path = _modelPathController.text.trim();
+    await widget.controller.importVisionModelFromPath(path);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final totalDocs = controller.allDocuments.length;
     final verifiedDeadlines = controller.verifiedDeadlines.length;
     final needsReview = controller.needsReviewDocuments.length;
     final currentTheme = controller.themeMode;
     final defaultOffsets = controller.defaultReminderOffsets;
+    final visionStatus = controller.visionModelStatus;
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -121,6 +142,105 @@ class SettingsScreen extends StatelessWidget {
                         label: const Text('Clear Local Processing Notices'),
                       ),
                   ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          key: const Key('settings_gemma_vision_card'),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _buildSectionHeader(
+                  context,
+                  icon: Icons.auto_awesome_outlined,
+                  title:
+                      'Gemma 3n E4B Vision (Experimental On-Device Extractor)',
+                ),
+                const SizedBox(height: 12),
+                _buildStatusRow(
+                  'Vision Model State',
+                  controller.visionModelState.displayName,
+                  isPositive: visionStatus.available,
+                ),
+                _buildStatusRow(
+                  'Provisioned Artifact',
+                  visionStatus.modelName ??
+                      'None (Using Offline OCR + Manual Review Fallback)',
+                  isPositive: visionStatus.available,
+                ),
+                _buildStatusRow(
+                  'Action Guide Coexistence',
+                  visionStatus.available
+                      ? 'Deterministic Playbook Enforced (Qwen paused while Gemma active)'
+                      : 'Hybrid Offline Playbook Active',
+                  isPositive: true,
+                ),
+                if (visionStatus.message != null) ...<Widget>[
+                  const SizedBox(height: 4),
+                  Text(
+                    visionStatus.message!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: LifeVaultColors.textSecondary,
+                        ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('settings_gemma_model_path_field'),
+                  controller: _modelPathController,
+                  decoration: const InputDecoration(
+                    labelText: 'Local Gemma 3n Model Path (.litertlm or .task)',
+                    hintText: '/sdcard/Download/gemma-3n-E4B-it-int4.litertlm',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    FilledButton.icon(
+                      key: const Key('settings_import_gemma_model_button'),
+                      onPressed: _importLocalModel,
+                      icon: const Icon(Icons.file_download_outlined, size: 18),
+                      label: const Text('Import Local Model'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('settings_refresh_gemma_status_button'),
+                      onPressed: controller.refreshVisionModelStatus,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Refresh Status'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('settings_unload_gemma_model_button'),
+                      onPressed: controller.unloadVisionModel,
+                      icon: const Icon(Icons.memory_outlined, size: 18),
+                      label: const Text('Unload from Memory'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: LifeVaultColors.infoBackground,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'Gemma 3n E4B Notice: Model weights (~4 GB .litertlm / .task) are governed by the '
+                    'Google Gemma Terms of Use and are never bundled into Git or the base APK. '
+                    'LifeVault never reads AI Edge Gallery private storage. When the model is not '
+                    'imported or device RAM is constrained, LifeVault automatically uses offline '
+                    'Tesseract OCR + manual review.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: LifeVaultColors.textPrimary,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -286,11 +406,13 @@ class SettingsScreen extends StatelessWidget {
       children: <Widget>[
         Icon(icon, color: LifeVaultColors.primary, size: 20),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
         ),
       ],
     );

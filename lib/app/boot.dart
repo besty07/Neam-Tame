@@ -4,6 +4,7 @@ import '../core/contracts/contracts.dart';
 import '../features/action_guide/action_guide.dart';
 import '../features/capture_ocr/capture_ocr.dart';
 import '../features/classification/classification.dart';
+import '../features/gemma_vision/gemma_vision.dart';
 import '../features/screens/app_shell_screen.dart';
 import '../features/vault/vault.dart';
 import 'app_controller.dart';
@@ -23,6 +24,8 @@ class LifeVaultDependencies {
     required this.questionService,
     required this.reminderService,
     this.actionGuideService,
+    this.gemmaVisionService,
+    this.visionExtractionService,
     this.captureDelegate,
     this.nowProvider,
     this.isPersistentStorage = false,
@@ -34,6 +37,8 @@ class LifeVaultDependencies {
   final QuestionService questionService;
   final ReminderService reminderService;
   final ActionGuideService? actionGuideService;
+  final GemmaVisionExtractionService? gemmaVisionService;
+  final VisionDocumentExtractionService? visionExtractionService;
   final ImageCaptureDelegate? captureDelegate;
   final DateTime Function()? nowProvider;
   final bool isPersistentStorage;
@@ -116,6 +121,8 @@ class _LifeVaultAppState extends State<LifeVaultApp> {
         questionService: deps.questionService,
         reminderService: deps.reminderService,
         actionGuideService: deps.actionGuideService,
+        gemmaVisionService: deps.gemmaVisionService,
+        visionExtractionService: deps.visionExtractionService,
         captureDelegate: deps.captureDelegate ?? CaptureServiceImageDelegate(),
         nowProvider: deps.nowProvider,
         isPersistentStorage: deps.isPersistentStorage,

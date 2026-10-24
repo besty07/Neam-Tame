@@ -11,7 +11,8 @@ import 'document_detail_screen.dart';
 import 'review_screen.dart';
 
 /// Offline Scan screen supporting camera capture, gallery import, duplicate
-/// SHA-256 detection, cancellable OCR processing, and manual entry fallback.
+/// SHA-256 detection, optional Gemma 3n E4B Vision extraction, cancellable OCR
+/// processing, and manual entry fallback.
 class ScanScreen extends StatelessWidget {
   const ScanScreen({
     super.key,
@@ -83,16 +84,34 @@ class ScanScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text(
-                  'Add a Document',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'Add a Document',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
                       ),
+                    ),
+                    Chip(
+                      key: const Key('scan_vision_model_badge'),
+                      avatar: Icon(
+                        controller.visionModelStatus.available
+                            ? Icons.auto_awesome_outlined
+                            : Icons.document_scanner_outlined,
+                        size: 16,
+                      ),
+                      label: Text(controller.visionModelState.displayName),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'All OCR and date extraction happens offline on your '
-                  'Android device. Nothing is uploaded.',
+                  'All OCR, Gemma 3n Vision candidate extraction, and date '
+                  'parsing happen offline on your Android device. Nothing is uploaded.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: LifeVaultColors.textSecondary,
                       ),
@@ -142,8 +161,10 @@ class ScanScreen extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.error_outline,
-                      color: LifeVaultColors.danger),
+                  const Icon(
+                    Icons.error_outline,
+                    color: LifeVaultColors.danger,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -226,13 +247,17 @@ class ScanScreen extends StatelessWidget {
             const CircularProgressIndicator(),
             const SizedBox(height: 10),
             Text(
-              'Running Offline OCR & Date Extraction...',
+              controller.visionModelState == VisionModelState.analyzing
+                  ? 'Analyzing Document Image with Gemma 3n E4B...'
+                  : 'Running Offline OCR & Date Extraction...',
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Recognizing printed English text locally using Tesseract.',
+            Text(
+              controller.visionModelState == VisionModelState.analyzing
+                  ? 'Extracting candidate fields locally on-device.'
+                  : 'Recognizing printed English text locally using Tesseract.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),

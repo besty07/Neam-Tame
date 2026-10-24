@@ -1,4 +1,4 @@
-/// Frozen domain enums for LifeVault v0.1.
+/// Frozen domain enums for LifeVault v0.1 / v0.2.
 ///
 /// Owned by Developer 4 (Integration Lead). Do not redefine in feature modules.
 library;
@@ -39,7 +39,8 @@ enum DocumentCategory {
     final normalized = raw.trim().toLowerCase();
     for (final value in DocumentCategory.values) {
       if (value.wireName == normalized ||
-          value.name.toLowerCase() == normalized) {
+          value.name.toLowerCase() == normalized ||
+          value.displayName.toLowerCase() == normalized) {
         return value;
       }
     }
@@ -84,7 +85,8 @@ enum DocumentType {
     final normalized = raw.trim().toLowerCase();
     for (final value in DocumentType.values) {
       if (value.wireName == normalized ||
-          value.name.toLowerCase() == normalized) {
+          value.name.toLowerCase() == normalized ||
+          value.displayName.toLowerCase() == normalized) {
         return value;
       }
     }
@@ -322,11 +324,42 @@ enum AnswerStatus {
 
 /// Engine source that produced an [ActionPlaybook].
 enum PlaybookSource {
-  qwen('qwen', 'Qwen-0.6B On-Device'),
+  gemma('gemma', 'Gemma 3n On-Device'),
+  qwen('qwen', 'Qwen2.5-0.5B On-Device'),
   deterministicFallback('deterministic_fallback', 'Verified Offline Playbook');
 
   const PlaybookSource(this.wireName, this.displayName);
 
   final String wireName;
   final String displayName;
+}
+
+/// Runtime state of the optional Gemma 3n E4B IT on-device vision extractor
+/// (`LifeVault_GEMMA3N_VISION_MIGRATION.md` Section 4).
+enum VisionModelState {
+  modelMissing('model_missing', 'Model missing'),
+  loadingModel('loading_model', 'Loading model'),
+  ready('ready', 'Gemma 3n E4B ready'),
+  analyzing('analyzing', 'Analyzing'),
+  needsReview('needs_review', 'Needs review'),
+  modelUnavailable('model_unavailable', 'Model unavailable');
+
+  const VisionModelState(this.wireName, this.displayName);
+
+  final String wireName;
+  final String displayName;
+
+  static VisionModelState fromWire(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return VisionModelState.modelMissing;
+    }
+    final normalized = raw.trim().toLowerCase();
+    for (final value in VisionModelState.values) {
+      if (value.wireName == normalized ||
+          value.name.toLowerCase() == normalized) {
+        return value;
+      }
+    }
+    return VisionModelState.modelMissing;
+  }
 }

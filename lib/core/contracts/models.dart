@@ -1,4 +1,4 @@
-/// Frozen domain DTOs for LifeVault v0.1.
+/// Frozen domain DTOs for LifeVault v0.1 / v0.2.
 ///
 /// Owned by Developer 4 (Integration Lead). Do not redefine in feature modules.
 library;
@@ -126,7 +126,8 @@ class OcrOutput {
   bool get isSuccess => errorCode == null;
 }
 
-/// Candidate date recognized by [DocumentExtractionService.extract].
+/// Candidate date recognized by [DocumentExtractionService.extract] or
+/// `GemmaVisionExtractionService`.
 class DateCandidate {
   const DateCandidate({
     required this.fieldKind,
@@ -457,7 +458,7 @@ class ActionPlaybook {
   final String documentId;
   final String summary;
   final List<ActionStep> steps;
-  final PlaybookSource source; // qwen | deterministicFallback
+  final PlaybookSource source; // gemma | qwen | deterministicFallback
 
   ActionPlaybook copyWith({
     String? documentId,
@@ -470,6 +471,58 @@ class ActionPlaybook {
       summary: summary ?? this.summary,
       steps: steps ?? this.steps,
       source: source ?? this.source,
+    );
+  }
+}
+
+/// Unverified multimodal or OCR extraction draft
+/// (`LifeVault_GEMMA3N_VISION_MIGRATION.md` Section 4).
+///
+/// All fields are explicitly UNVERIFIED until the user confirms and saves
+/// on the Review screen.
+class ExtractionDraft {
+  const ExtractionDraft({
+    required this.sourceImagePath,
+    this.category,
+    this.documentType,
+    this.title,
+    this.assetName,
+    this.dates = const <DateCandidate>[],
+    this.amount,
+    this.referenceNumber,
+    this.warnings = const <String>[],
+    this.page = 1,
+    this.usedGemmaVision = false,
+  });
+
+  final String? category;
+  final String? documentType;
+  final String? title;
+  final String? assetName;
+  final List<DateCandidate> dates;
+  final String? amount;
+  final String? referenceNumber;
+  final List<String> warnings;
+  final String sourceImagePath;
+  final int page;
+  final bool usedGemmaVision;
+
+  DocumentCategory get resolvedCategory => DocumentCategory.fromWire(category);
+
+  DocumentType get resolvedDocumentType => DocumentType.fromWire(documentType);
+
+  ExtractionResult toExtractionResult() {
+    return ExtractionResult(
+      suggestedCategory: resolvedCategory,
+      suggestedType: resolvedDocumentType,
+      categoryEvidence: usedGemmaVision
+          ? 'Gemma 3n E4B Vision candidate (unverified)'
+          : 'OCR keyword extraction candidate',
+      typeEvidence: usedGemmaVision
+          ? 'Gemma 3n E4B Vision candidate (unverified)'
+          : 'OCR keyword extraction candidate',
+      dateCandidates: dates,
+      assetNameSuggestion: assetName,
     );
   }
 }

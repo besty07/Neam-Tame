@@ -1,4 +1,4 @@
-/// Frozen service interfaces for LifeVault v0.1.
+/// Frozen service interfaces for LifeVault v0.1 / v0.2.
 ///
 /// Owned by Developer 4 (Integration Lead). Feature modules implement these
 /// contracts in their respective folders.
@@ -70,11 +70,23 @@ abstract interface class ReminderService {
   Future<void> cancelForDocument(String documentId);
 }
 
-/// On-device Action Guide generator (Qwen-0.6B primary + deterministic fallback).
+/// On-device Action Guide generator (deterministic default + optional LLM).
 abstract interface class ActionGuideService {
   Future<ActionPlaybook> generatePlaybook({
     required DocumentRecord document,
     DeadlineRecord? deadline,
     String? evidenceSnippet,
+  });
+}
+
+/// Multimodal / image-level document field extraction contract
+/// (`LifeVault_GEMMA3N_VISION_MIGRATION.md` Section 4).
+///
+/// Implemented by `GemmaVisionExtractionService`, `OcrExtractionService`, and
+/// `HybridVisionExtractionService`.
+abstract interface class VisionDocumentExtractionService {
+  Future<ExtractionDraft> extractImage(
+    String localImagePath, {
+    int page = 1,
   });
 }

@@ -9,6 +9,7 @@ import io.flutter.embedding.engine.FlutterEngine
  * Registers:
  * - Developer 1's [LifeVaultOcrChannel] on channel `lifevault/ocr`
  * - Qwen-0.6B [LifeVaultLlmChannel] on channel `lifevault/llm`
+ * - Gemma 3n E4B Vision [LifeVaultGemmaChannel] on channel `lifevault/gemma_vision`
  */
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -16,5 +17,6 @@ class MainActivity : FlutterActivity() {
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         LifeVaultOcrChannel.register(this, messenger)
         LifeVaultLlmChannel.register(this, messenger)
+        LifeVaultGemmaChannel.register(this, messenger)
     }
 }

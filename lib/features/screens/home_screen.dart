@@ -18,12 +18,17 @@ class HomeScreen extends StatelessWidget {
 
   final LifeVaultController controller;
 
-  Future<void> _openDocument(BuildContext context, String documentId) async {
+  Future<void> _openDocument(
+    BuildContext context,
+    String documentId, {
+    bool highlightPlaybook = false,
+  }) async {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (context) => DocumentDetailScreen(
           controller: controller,
           documentId: documentId,
+          highlightPlaybook: highlightPlaybook,
         ),
       ),
     );
@@ -367,6 +372,16 @@ class HomeScreen extends StatelessWidget {
                     onPressed: () => _openDocument(context, item.document.id),
                     icon: const Icon(Icons.visibility_outlined, size: 16),
                     label: const Text('Open'),
+                  ),
+                  TextButton.icon(
+                    key: Key('home_playbook_${item.deadline.id}'),
+                    onPressed: () => _openDocument(
+                      context,
+                      item.document.id,
+                      highlightPlaybook: true,
+                    ),
+                    icon: const Icon(Icons.checklist_rtl_outlined, size: 16),
+                    label: const Text('Action Guide'),
                   ),
                   TextButton.icon(
                     key: Key('home_edit_${item.deadline.id}'),
