@@ -139,7 +139,10 @@ void main() {
       expect(find.byKey(const Key('scan_preview_card')), findsOneWidget);
 
       // Process document -> opens ReviewScreen.
-      await tester.tap(find.byKey(const Key('scan_process_button')));
+      final processBtn = find.byKey(const Key('scan_process_button'));
+      await tester.ensureVisible(processBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(processBtn);
       await tester.pumpAndSettle();
 
       expect(find.text('Review & Confirm'), findsOneWidget);
@@ -149,17 +152,19 @@ void main() {
       );
 
       // User corrects title and mistaken OCR date (2026-11-10 -> 2026-11-15).
-      await tester.enterText(
-        find.byKey(const Key('review_title_field')),
-        'Honda Bike Insurance',
-      );
-      await tester.enterText(
-        find.byKey(const Key('review_date_iso_field')),
-        '2026-11-15',
-      );
+      final titleField = find.byKey(const Key('review_title_field'));
+      await tester.ensureVisible(titleField);
+      await tester.pumpAndSettle();
+      await tester.enterText(titleField, 'Honda Bike Insurance');
+
+      final dateField = find.byKey(const Key('review_date_iso_field'));
+      await tester.ensureVisible(dateField);
+      await tester.pumpAndSettle();
+      await tester.enterText(dateField, '2026-11-15');
 
       final confirmBtn = find.byKey(const Key('confirm_and_save_button'));
       await tester.ensureVisible(confirmBtn);
+      await tester.pumpAndSettle();
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
