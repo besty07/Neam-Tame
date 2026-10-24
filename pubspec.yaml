@@ -18,6 +18,7 @@ dependencies:
   sqflite: ^2.3.3+1
   timezone: ^0.9.4
   uuid: ^4.4.2
+  google_mlkit_text_recognition: ^0.17.1
 
 dev_dependencies:
   flutter_test:
