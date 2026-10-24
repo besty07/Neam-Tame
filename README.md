@@ -6,6 +6,16 @@ LifeVault transforms captured household documents (insurance policies, appliance
 
 ---
 
+## Release Artifact (`v0.1-hackathon`)
+
+- **APK Artifact:** `LifeVault-Lite-v0.1-release-mode.apk` (attached to GitHub Release [`v0.1-hackathon`](https://github.com/besty07/Neam-Tame/releases/tag/v0.1-hackathon))
+- **Size:** `84,471,067 bytes` (`80.56 MB`)
+- **SHA-256:** `25c598b87e8b04690e1f545c075980dd91a859821c465e1cce9d79f50a158d98`
+- **Signing Disclosure:** Built in Flutter `--release` mode and signed with the Android development/debug keystore for hackathon evaluation (`NOT a production signing identity`).
+- **Verification Report:** See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for the full 102-test CI summary, merged manifest zero-internet audit, and 2-minute airplane-mode demo script.
+
+---
+
 ## Privacy & Security Guarantee (v0.1)
 
 - **100% On-Device & Offline:** Works completely in airplane mode from first launch.
