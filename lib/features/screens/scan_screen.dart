@@ -72,83 +72,86 @@ class ScanScreen extends StatelessWidget {
     final errorMessage = controller.scanErrorMessage;
     final isProcessing = controller.isProcessingScan;
 
-    return ListView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Text(
-                  'Capture or Import Document',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'All OCR and date extraction happens offline on your '
-                  'Android device. Nothing is uploaded.',
-                ),
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  key: const Key('scan_take_photo_button'),
-                  onPressed: isProcessing ? null : controller.pickFromCamera,
-                  icon: const Icon(Icons.camera_alt_outlined),
-                  label: const Text('Take Photo'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  key: const Key('scan_choose_gallery_button'),
-                  onPressed: isProcessing ? null : controller.pickFromGallery,
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Choose from Gallery'),
-                ),
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  key: const Key('scan_manual_entry_button'),
-                  onPressed:
-                      isProcessing ? null : () => _openManualReview(context),
-                  icon: const Icon(Icons.edit_note_outlined),
-                  label: const Text('Enter Details Manually (OCR Fallback)'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (errorMessage != null) ...<Widget>[
-          const SizedBox(height: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
           Card(
-            color: Colors.red.shade50,
             child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  Icon(Icons.error_outline, color: Colors.red.shade900),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      errorMessage,
-                      style: TextStyle(color: Colors.red.shade900),
-                    ),
+                  Text(
+                    'Capture or Import Document',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'All OCR and date extraction happens offline on your '
+                    'Android device. Nothing is uploaded.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    key: const Key('scan_take_photo_button'),
+                    onPressed: isProcessing ? null : controller.pickFromCamera,
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: const Text('Take Photo'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    key: const Key('scan_choose_gallery_button'),
+                    onPressed: isProcessing ? null : controller.pickFromGallery,
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Choose from Gallery'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    key: const Key('scan_manual_entry_button'),
+                    onPressed:
+                        isProcessing ? null : () => _openManualReview(context),
+                    icon: const Icon(Icons.edit_note_outlined),
+                    label: const Text('Enter Details Manually (OCR Fallback)'),
                   ),
                 ],
               ),
             ),
           ),
+          if (errorMessage != null) ...<Widget>[
+            const SizedBox(height: 12),
+            Card(
+              color: Colors.red.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.error_outline, color: Colors.red.shade900),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        errorMessage,
+                        style: TextStyle(color: Colors.red.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (duplicateDoc != null) ...<Widget>[
+            const SizedBox(height: 12),
+            _buildDuplicateBanner(context, duplicateDoc),
+          ],
+          if (isProcessing) ...<Widget>[
+            const SizedBox(height: 16),
+            _buildProcessingStateCard(context),
+          ] else if (selectedFile != null) ...<Widget>[
+            const SizedBox(height: 16),
+            _buildSelectedPreviewCard(context, selectedFile),
+          ],
         ],
-        if (duplicateDoc != null) ...<Widget>[
-          const SizedBox(height: 12),
-          _buildDuplicateBanner(context, duplicateDoc),
-        ],
-        if (isProcessing) ...<Widget>[
-          const SizedBox(height: 16),
-          _buildProcessingStateCard(context),
-        ] else if (selectedFile != null) ...<Widget>[
-          const SizedBox(height: 16),
-          _buildSelectedPreviewCard(context, selectedFile),
-        ],
-      ],
+      ),
     );
   }
 

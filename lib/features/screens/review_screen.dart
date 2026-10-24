@@ -260,48 +260,51 @@ class _ReviewScreenState extends State<ReviewScreen> {
               : 'Review & Confirm',
         ),
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          _buildImagePreviewCard(imageFile, hasLocalFile),
-          const SizedBox(height: 12),
-          if (widget.draft.ocrErrorMessage != null) ...<Widget>[
-            _buildAlertBanner(
-              icon: Icons.warning_amber_rounded,
-              color: Colors.orange.shade800,
-              backgroundColor: Colors.orange.shade50,
-              text: widget.draft.ocrErrorMessage!,
-            ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _buildImagePreviewCard(imageFile, hasLocalFile),
             const SizedBox(height: 12),
+            if (widget.draft.ocrErrorMessage != null) ...<Widget>[
+              _buildAlertBanner(
+                icon: Icons.warning_amber_rounded,
+                color: Colors.orange.shade800,
+                backgroundColor: Colors.orange.shade50,
+                text: widget.draft.ocrErrorMessage!,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_selectedCategory == DocumentCategory.medical) ...<Widget>[
+              _buildAlertBanner(
+                icon: Icons.privacy_tip_outlined,
+                color: Colors.teal.shade900,
+                backgroundColor: Colors.teal.shade50,
+                text: 'Medical records stay strictly on-device. '
+                    'Recognized dates are for organization only and are not '
+                    'medical advice.',
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (_validationError != null) ...<Widget>[
+              _buildAlertBanner(
+                icon: Icons.error_outline,
+                color: Colors.red.shade900,
+                backgroundColor: Colors.red.shade50,
+                text: _validationError!,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _buildMetadataSection(extraction),
+            const SizedBox(height: 16),
+            _buildCandidatesSection(candidates),
+            const SizedBox(height: 16),
+            _buildConfirmedDeadlineSection(),
+            const SizedBox(height: 24),
+            _buildActionButtons(),
           ],
-          if (_selectedCategory == DocumentCategory.medical) ...<Widget>[
-            _buildAlertBanner(
-              icon: Icons.privacy_tip_outlined,
-              color: Colors.teal.shade900,
-              backgroundColor: Colors.teal.shade50,
-              text: 'Medical records stay strictly on-device. '
-                  'Recognized dates are for organization only and are not '
-                  'medical advice.',
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (_validationError != null) ...<Widget>[
-            _buildAlertBanner(
-              icon: Icons.error_outline,
-              color: Colors.red.shade900,
-              backgroundColor: Colors.red.shade50,
-              text: _validationError!,
-            ),
-            const SizedBox(height: 12),
-          ],
-          _buildMetadataSection(extraction),
-          const SizedBox(height: 16),
-          _buildCandidatesSection(candidates),
-          const SizedBox(height: 16),
-          _buildConfirmedDeadlineSection(),
-          const SizedBox(height: 24),
-          _buildActionButtons(),
-        ],
+        ),
       ),
     );
   }
