@@ -99,7 +99,8 @@ class LifeVaultController extends ChangeNotifier {
     ActionGuideService? actionGuideService,
     DateTime Function()? nowProvider,
     this.isPersistentStorage = false,
-  }) : actionGuideService = actionGuideService ?? HybridActionGuideService() {
+  }) : actionGuideService =
+            actionGuideService ?? const DeterministicActionGuideService() {
     _nowProvider = nowProvider ?? DateTime.now;
     if (reminderService is ReminderServiceImpl) {
       (reminderService as ReminderServiceImpl)

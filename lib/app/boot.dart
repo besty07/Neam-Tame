@@ -49,7 +49,7 @@ class LifeVaultDependencies {
       vaultRepository: repository,
       questionService: GroundedVaultQuestionService(repository),
       reminderService: const NoOpReminderService(),
-      actionGuideService: HybridActionGuideService(),
+      actionGuideService: const DeterministicActionGuideService(),
       captureDelegate: CaptureServiceImageDelegate(),
       isPersistentStorage: false,
     );

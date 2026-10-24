@@ -8,7 +8,7 @@ class DeterministicActionGuideService implements ActionGuideService {
   const DeterministicActionGuideService();
 
   static final RegExp _identifierPattern = RegExp(
-    r'(?:policy|consumer|meter|serial|invoice|account|reg(?:istration)?|chassis|id|no|number)\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})',
+    r'(?:policy|consumer|meter|serial|invoice|account|reg(?:istration)?|chassis|id|no|number)(?:\s*(?:no|number|num|id|code))?\s*[:#\-]?\s*([A-Z0-9][A-Z0-9\-/]{3,24})',
     caseSensitive: false,
   );
 
