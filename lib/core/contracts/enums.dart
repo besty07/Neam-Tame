@@ -24,19 +24,36 @@ enum DocumentCategory {
   /// Human-readable label for UI display.
   final String displayName;
 
-  // Snake-case static aliases for compatibility with Master Plan tables.
+  // Snake-case and Gemma 3n prompt static aliases for compatibility.
   // ignore: constant_identifier_names
   static const DocumentCategory home_utilities = homeUtilities;
   // ignore: constant_identifier_names
   static const DocumentCategory identity_personal = identityPersonal;
   // ignore: constant_identifier_names
   static const DocumentCategory legal_letters = legalLetters;
+  static const DocumentCategory vehicle = vehicles;
+  static const DocumentCategory identity = identityPersonal;
+  static const DocumentCategory home = homeUtilities;
+  static const DocumentCategory warranty = appliances;
+  static const DocumentCategory tax = finance;
 
   static DocumentCategory fromWire(String? raw) {
     if (raw == null || raw.isEmpty) {
       return DocumentCategory.other;
     }
     final normalized = raw.trim().toLowerCase();
+    switch (normalized) {
+      case 'vehicle':
+        return DocumentCategory.vehicles;
+      case 'identity':
+        return DocumentCategory.identityPersonal;
+      case 'home':
+        return DocumentCategory.homeUtilities;
+      case 'warranty':
+        return DocumentCategory.appliances;
+      case 'tax':
+        return DocumentCategory.finance;
+    }
     for (final value in DocumentCategory.values) {
       if (value.wireName == normalized ||
           value.name.toLowerCase() == normalized ||
