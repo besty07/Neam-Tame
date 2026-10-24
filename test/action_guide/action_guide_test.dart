@@ -256,7 +256,7 @@ void main() {
       );
 
       final controller = LifeVaultController(
-        ocrService: MethodChannelOfflineOcrService(),
+        ocrService: const MethodChannelOfflineOcrService(),
         extractionService: const LifeVaultDocumentExtractionService(),
         vaultRepository: repository,
         questionService: GroundedVaultQuestionService(repository),
