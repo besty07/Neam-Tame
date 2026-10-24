@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lifevault/app/boot.dart';
 import 'package:lifevault/app/default_services.dart';
-import 'package:lifevault/core/contracts/contracts.dart';
 import 'package:lifevault/features/capture_ocr/capture_ocr.dart';
 import 'package:lifevault/features/classification/classification.dart';
 import 'package:lifevault/features/vault/vault.dart';
