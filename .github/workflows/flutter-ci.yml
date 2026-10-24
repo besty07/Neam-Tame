@@ -14,7 +14,7 @@ on:
       build_apk:
         description: 'Build release-mode Android APK artifact'
         required: false
-        default: 'false'
+        default: 'true'
         type: choice
         options:
           - 'false'
@@ -74,17 +74,50 @@ jobs:
           flutter-version: '3.24.3'
           cache: true
 
+      - name: Generate Android Gradle wrapper & launcher resources while preserving custom manifest/code
+        run: |
+          mkdir -p /tmp/lv_backup
+          cp android/app/src/main/AndroidManifest.xml /tmp/lv_backup/AndroidManifest.xml
+          cp android/app/build.gradle /tmp/lv_backup/app_build.gradle
+          cp android/build.gradle /tmp/lv_backup/root_build.gradle
+          cp android/settings.gradle /tmp/lv_backup/settings.gradle
+          cp android/gradle.properties /tmp/lv_backup/gradle.properties
+          cp -r android/app/src/main/kotlin /tmp/lv_backup/kotlin
+          cp -r android/app/src/main/res/xml /tmp/lv_backup/xml
+          flutter create --platforms=android --org com.lifevault --project-name app .
+          cp /tmp/lv_backup/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp /tmp/lv_backup/app_build.gradle android/app/build.gradle
+          cp /tmp/lv_backup/root_build.gradle android/build.gradle
+          cp /tmp/lv_backup/settings.gradle android/settings.gradle
+          cp /tmp/lv_backup/gradle.properties android/gradle.properties
+          cp -r /tmp/lv_backup/kotlin/* android/app/src/main/kotlin/
+          mkdir -p android/app/src/main/res/xml
+          cp -r /tmp/lv_backup/xml/* android/app/src/main/res/xml/
+          rm -rf android/app/src/main/kotlin/com/lifevault/app/MainActivity.kt.bak
+          git checkout -- lib/ test/ pubspec.yaml analysis_options.yaml README.md
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build release-mode APK
         run: flutter build apk --release
 
-      - name: Compute SHA-256 and inspect merged manifest for INTERNET permission
+      - name: Verify merged release manifest has zero INTERNET permission and compute SHA-256
         run: |
           APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
           cp "$APK_PATH" LifeVault-Lite-v0.1-release-mode.apk
+          ls -lh LifeVault-Lite-v0.1-release-mode.apk
+          stat -c "%s bytes" LifeVault-Lite-v0.1-release-mode.apk | tee apk-size.txt
           sha256sum LifeVault-Lite-v0.1-release-mode.apk | tee apk-sha256.txt
+          MERGED_MANIFEST=$(find build/app/intermediates/merged_manifests/release -name "AndroidManifest.xml" | head -n 1)
+          echo "Inspecting merged release manifest: $MERGED_MANIFEST"
+          cat "$MERGED_MANIFEST"
+          if grep -q "android.permission.INTERNET" "$MERGED_MANIFEST"; then
+            echo "ERROR: android.permission.INTERNET found in merged release manifest!"
+            exit 1
+          else
+            echo "PASS: Zero android.permission.INTERNET in merged release manifest."
+          fi
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -93,3 +126,4 @@ jobs:
           path: |
             LifeVault-Lite-v0.1-release-mode.apk
             apk-sha256.txt
+            apk-size.txt
