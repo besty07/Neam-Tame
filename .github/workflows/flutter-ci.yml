@@ -6,6 +6,8 @@ on:
       - main
       - 'feat/**'
       - 'chore/**'
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -54,7 +56,7 @@ jobs:
   build_release_apk:
     name: Build Release APK (Manual / Tag)
     needs: flutter_checks
-    if: github.event_name == 'workflow_dispatch' && inputs.build_apk == 'true'
+    if: (github.event_name == 'workflow_dispatch' && inputs.build_apk == 'true') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
