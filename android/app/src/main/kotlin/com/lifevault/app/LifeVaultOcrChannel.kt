@@ -210,11 +210,11 @@ class LifeVaultOcrChannel(
         } finally {
             try {
                 tessBaseApi.recycle()
-            } catch (_: Exception) {
+            } catch (ignored: Exception) {
             }
             try {
                 bitmap.recycle()
-            } catch (_: Exception) {
+            } catch (ignored: Exception) {
             }
         }
     }
@@ -238,7 +238,7 @@ class LifeVaultOcrChannel(
 
         val assetManager = context.assets
         val candidates = listOf(
-            try { io.flutter.FlutterInjector.instance().flutterLoader().getLookupKeyForAsset("assets/tessdata/$language.traineddata") } catch (_: Exception) { null },
+            try { io.flutter.FlutterInjector.instance().flutterLoader().getLookupKeyForAsset("assets/tessdata/$language.traineddata") } catch (ignored: Exception) { null },
             ASSET_MODEL_PATH,
             "flutter_assets/assets/tessdata/$language.traineddata",
             "assets/tessdata/$language.traineddata"
@@ -249,7 +249,7 @@ class LifeVaultOcrChannel(
             try {
                 inputStream = assetManager.open(candidate)
                 if (inputStream != null) break
-            } catch (_: IOException) {
+            } catch (ignored: IOException) {
             }
         }
 
@@ -329,7 +329,7 @@ class LifeVaultOcrChannel(
         val orientation = try {
             val exif = ExifInterface(imagePath)
             exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        } catch (_: IOException) {
+        } catch (ignored: IOException) {
             ExifInterface.ORIENTATION_NORMAL
         }
 

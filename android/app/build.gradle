@@ -24,7 +24,7 @@ if (flutterVersionName == null) {
 
 android {
     namespace "com.lifevault.app"
-    compileSdk 34
+    compileSdk 35
 
     compileOptions {
         coreLibraryDesugaringEnabled true
