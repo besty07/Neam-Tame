@@ -1,18 +1,28 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 import '../../core/contracts/models.dart';
 import '../../core/contracts/services.dart';
 
-/// Concrete implementation of [OfflineOcrService] connecting Flutter to the
-/// native Kotlin Tesseract bridge (`LifeVaultOcrChannel`).
+/// Concrete implementation of [OfflineOcrService].
 ///
-/// Owned exclusively by Developer 1 (Capture & OCR).
+/// On production mobile devices (Android / iOS), text recognition is performed
+/// on-device using Google ML Kit (`google_mlkit_text_recognition`) with zero network calls.
+/// For unit tests or custom platform bridges, an optional [MethodChannel] or [TextRecognizer]
+/// can be injected.
 class OfflineOcrServiceImpl implements OfflineOcrService {
-  OfflineOcrServiceImpl({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('lifevault/ocr');
+  OfflineOcrServiceImpl({
+    MethodChannel? channel,
+    TextRecognizer? recognizer,
+  })  : _channel = channel,
+        _recognizer = recognizer;
 
-  final MethodChannel _channel;
+  final MethodChannel? _channel;
+  TextRecognizer? _recognizer;
+
+  TextRecognizer get _effectiveRecognizer =>
+      _recognizer ??= TextRecognizer(script: TextRecognitionScript.latin);
 
   @override
   Future<OcrOutput> recognizeImage(
@@ -42,9 +52,59 @@ class OfflineOcrServiceImpl implements OfflineOcrService {
       );
     }
 
+    // If a MethodChannel was explicitly supplied (e.g. in test suites), delegate to it.
+    if (_channel != null) {
+      return _recognizeViaChannel(
+        localImagePath: localImagePath,
+        language: language,
+        stopwatch: stopwatch,
+      );
+    }
+
+    // Otherwise, perform high-accuracy on-device recognition using Google ML Kit.
+    try {
+      final InputImage inputImage = InputImage.fromFilePath(localImagePath);
+      final RecognizedText recognizedText =
+          await _effectiveRecognizer.processImage(inputImage);
+
+      stopwatch.stop();
+
+      return OcrOutput(
+        text: recognizedText.text,
+        language: language,
+        page: 1,
+        confidence: 100.0,
+        processingMs: stopwatch.elapsedMilliseconds,
+      );
+    } on PlatformException catch (e) {
+      stopwatch.stop();
+      return OcrOutput(
+        text: '',
+        language: language,
+        errorCode: e.code.isNotEmpty ? e.code : 'OCR_FAILED',
+        errorMessage: e.message ?? e.details?.toString(),
+        processingMs: stopwatch.elapsedMilliseconds,
+      );
+    } catch (e) {
+      stopwatch.stop();
+      return OcrOutput(
+        text: '',
+        language: language,
+        errorCode: 'OCR_FAILED',
+        errorMessage: e.toString(),
+        processingMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+  }
+
+  Future<OcrOutput> _recognizeViaChannel({
+    required String localImagePath,
+    required String language,
+    required Stopwatch stopwatch,
+  }) async {
     try {
       final Map<dynamic, dynamic>? rawResult =
-          await _channel.invokeMapMethod<dynamic, dynamic>(
+          await _channel!.invokeMapMethod<dynamic, dynamic>(
         'recognizeImage',
         <String, Object?>{
           'path': localImagePath,
@@ -102,5 +162,11 @@ class OfflineOcrServiceImpl implements OfflineOcrService {
         processingMs: stopwatch.elapsedMilliseconds,
       );
     }
+  }
+
+  /// Disposes resources held by the ML Kit text recognizer.
+  Future<void> dispose() async {
+    await _recognizer?.close();
+    _recognizer = null;
   }
 }

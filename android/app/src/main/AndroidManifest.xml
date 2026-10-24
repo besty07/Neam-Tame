@@ -35,6 +35,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Google ML Kit on-device OCR model declaration -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <!-- D3: Required by flutter_local_notifications for scheduling after reboot -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
