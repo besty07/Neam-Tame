@@ -235,7 +235,7 @@ void main() {
         },
       );
 
-      final repository = InMemoryVaultRepository(nowProvider: () => fixedNow);
+      final repository = InMemoryVaultRepository();
       final savedDoc = await repository.saveVerified(
         const VerifiedDocumentInput(
           originalTempPath: 'bike_policy.jpg',
@@ -256,13 +256,13 @@ void main() {
       );
 
       final controller = LifeVaultController(
-        ocrService: DeterministicSampleOcrService(),
+        ocrService: MethodChannelOfflineOcrService(),
         extractionService: const LifeVaultDocumentExtractionService(),
         vaultRepository: repository,
         questionService: GroundedVaultQuestionService(repository),
         reminderService: const NoOpReminderService(),
         actionGuideService: const DeterministicActionGuideService(),
-        captureDelegate: FakeMemoryCaptureDelegate(),
+        captureDelegate: CaptureServiceImageDelegate(),
         nowProvider: () => fixedNow,
       );
 
