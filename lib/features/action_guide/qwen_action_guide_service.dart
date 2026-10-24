@@ -20,7 +20,7 @@ class QwenActionGuideService implements ActionGuideService {
   static const String channelName = 'lifevault/llm';
   static const double defaultTemperature = 0.2;
   static const double defaultTopP = 0.9;
-  static const int defaultMaxTokens = 256;
+  static const int defaultMaxTokens = 96;
 
   /// Grounded system prompt from Section 4 of `QWEN_INTEGRATION_PLAN.md`.
   static const String systemPrompt = '''
@@ -235,7 +235,7 @@ class HybridActionGuideService implements ActionGuideService {
   HybridActionGuideService({
     ActionGuideService? primary,
     ActionGuideService? fallback,
-    this.timeout = const Duration(milliseconds: 3500),
+    this.timeout = const Duration(seconds: 25),
   })  : _primary = primary ?? QwenActionGuideService(),
         _fallback = fallback ?? const DeterministicActionGuideService();
 

@@ -80,3 +80,4 @@ assets/models/*.bin
 .DS_Store
 Thumbs.db
 Desktop.ini
+android/app/src/main/assets/lifevault_llama/

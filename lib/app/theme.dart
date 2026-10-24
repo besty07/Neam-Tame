@@ -88,7 +88,7 @@ class LifeVaultTheme {
           letterSpacing: -0.2,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: LifeVaultColors.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -151,7 +151,7 @@ class LifeVaultTheme {
           borderRadius: BorderRadius.circular(8),
         ),
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: LifeVaultColors.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
@@ -174,7 +174,7 @@ class LifeVaultTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(

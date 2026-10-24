@@ -15,6 +15,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 /**
  * Native Kotlin bridge for the Qwen-0.6B on-device Action Guide engine
@@ -39,6 +40,20 @@ class LifeVaultLlmChannel(
         const val CHANNEL_NAME = "lifevault/llm"
         private const val MODEL_FILENAME = "qwen-0.6b.gguf"
         private const val MIN_VALID_GGUF_BYTES = 16L
+        private const val ENGINE_ASSET_DIRECTORY = "lifevault_llama"
+        private const val ENGINE_DIRECTORY = "llama"
+        private const val ENGINE_EXECUTABLE = "llama-cli"
+        private val ENGINE_FILES = listOf(
+            ENGINE_EXECUTABLE,
+            "libggml-base.so",
+            "libggml-cpu.so",
+            "libggml.so",
+            "libllama-cli-impl.so",
+            "libllama-common.so",
+            "libllama-server-impl.so",
+            "libllama.so",
+            "libmtmd.so"
+        )
 
         @JvmStatic
         fun register(context: Context, messenger: BinaryMessenger): LifeVaultLlmChannel {
@@ -68,12 +83,12 @@ class LifeVaultLlmChannel(
                 val evidenceSnippet = call.argument<String>("evidenceSnippet")
 
                 scope.launch {
-                    val response = runOnDeviceGeneration(
+                val systemPrompt = call.argument<String>("systemPrompt") ?: ""
+                val userPrompt = call.argument<String>("userPrompt") ?: ""
+                val response = runOnDeviceGeneration(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
                         title = title,
-                        category = category,
-                        assetName = assetName,
-                        dueDateIso = dueDateIso,
-                        evidenceSnippet = evidenceSnippet
                     )
                     withContext(Dispatchers.Main) {
                         result.success(response)
@@ -96,11 +111,9 @@ class LifeVaultLlmChannel(
     }
 
     private fun runOnDeviceGeneration(
+        systemPrompt: String,
+        userPrompt: String,
         title: String,
-        category: String,
-        assetName: String?,
-        dueDateIso: String?,
-        evidenceSnippet: String?
     ): Map<String, Any?> {
         val startMs = SystemClock.elapsedRealtime()
         val modelFile = resolveOrStageModelFile()
@@ -114,42 +127,40 @@ class LifeVaultLlmChannel(
             )
         }
 
-        val targetSubject = if (!assetName.isNullOrBlank()) assetName else title
-        val dueClause = if (!dueDateIso.isNullOrBlank()) "before $dueDateIso" else "ahead of deadline"
-        val snippetClause = if (!evidenceSnippet.isNullOrBlank()) {
-            "Verified snippet reference: \"$evidenceSnippet\"."
-        } else {
-            "Verify against the stored document scan."
+        val executable = stageEngineExecutable()
+        if (executable == null) {
+            return mapOf(
+                "text" to "",
+                "processingMs" to (SystemClock.elapsedRealtime() - startMs).toInt(),
+                "errorCode" to "ENGINE_NOT_STAGED",
+                "errorMessage" to "The Android llama.cpp runtime is not packaged in this experimental APK."
+            )
         }
 
-        val generatedBullets = when (category.lowercase()) {
-            "insurance" -> """
-                - **Verify Policy & NCB**: Confirm your policy schedule and No Claim Bonus slab for $targetSubject $dueClause. $snippetClause
-                - **Keep RC & Previous Policy Ready**: Prepare the registration certificate and current policy copy before initiating renewal.
-                - **Renew Prior to Midnight Cutoff**: Complete payment $dueClause to prevent coverage lapse and mandatory vehicle/asset inspection.
-                - **Update Renewed Schedule**: Scan the new policy document into LifeVault once issued.
-            """.trimIndent()
-
-            "home_utilities" -> """
-                - **Copy Consumer / Meter ID**: Keep the consumer or meter reference for $targetSubject ready before payment. $snippetClause
-                - **Clear Bill Before Cutoff**: Submit payment $dueClause to avoid late fees or utility disconnection.
-                - **Verify Meter Units**: Cross-check billed consumption against your physical meter reading.
-                - **Store Payment Receipt**: Save the confirmation receipt in LifeVault for proof of payment.
-            """.trimIndent()
-
-            "appliances" -> """
-                - **Locate Serial & Tax Invoice**: Keep the serial number and original invoice for $targetSubject accessible. $snippetClause
-                - **Run Pre-Expiry Check**: Inspect $targetSubject for any defects or unusual noise $dueClause.
-                - **Register Service Claim Early**: Log any warranty repair ticket with authorized support $dueClause.
-            """.trimIndent()
-
-            else -> """
-                - **Keep Reference Details Handy**: Verify the key reference details on $targetSubject. $snippetClause
-                - **Complete Required Action**: Finish any renewal, payment, or follow-up required for $title $dueClause.
-                - **Update LifeVault Record**: Archive the updated receipt or renewed document in your local vault.
-            """.trimIndent()
+        val requestPrompt = buildString {
+            append(systemPrompt.trim())
+            append("\n\n")
+            append(userPrompt.trim())
+            append("\n\nReturn only 3 or 4 short bullet action steps. Do not introduce facts, dates, regulations, or requirements not present above. /no_think")
         }
-
+        val processOutput = executeLlama(executable, modelFile, requestPrompt)
+        if (processOutput.errorCode != null) {
+            return mapOf(
+                "text" to "",
+                "processingMs" to (SystemClock.elapsedRealtime() - startMs).toInt(),
+                "errorCode" to processOutput.errorCode,
+                "errorMessage" to processOutput.errorMessage
+            )
+        }
+        val generatedBullets = extractGeneratedText(processOutput.output)
+        if (generatedBullets.isBlank()) {
+            return mapOf(
+                "text" to "",
+                "processingMs" to (SystemClock.elapsedRealtime() - startMs).toInt(),
+                "errorCode" to "EMPTY_GENERATION",
+                "errorMessage" to "The on-device Qwen runtime returned no usable action steps."
+            )
+        }
         return mapOf(
             "text" to generatedBullets,
             "summary" to "Generated offline on-device by Qwen-0.6B (${modelFile.name}) for $title.",
@@ -157,6 +168,109 @@ class LifeVaultLlmChannel(
             "errorCode" to null,
             "errorMessage" to null
         )
+    }
+
+    private data class ProcessOutput(
+        val output: String = "",
+        val errorCode: String? = null,
+        val errorMessage: String? = null
+    )
+
+    @Synchronized
+    private fun stageEngineExecutable(): File? {
+        val engineDir = File(context.filesDir, ENGINE_DIRECTORY)
+        if (!engineDir.exists() && !engineDir.mkdirs()) {
+            return null
+        }
+
+        for (fileName in ENGINE_FILES) {
+            val destination = File(engineDir, fileName)
+            if (destination.exists() && destination.length() > 0L) {
+                continue
+            }
+            try {
+                context.assets.open("$ENGINE_ASSET_DIRECTORY/$fileName").use { input ->
+                    val temporary = File(engineDir, "$fileName.tmp")
+                    FileOutputStream(temporary).use { output -> input.copyTo(output) }
+                    if (destination.exists()) {
+                        destination.delete()
+                    }
+                    if (!temporary.renameTo(destination)) {
+                        temporary.copyTo(destination, overwrite = true)
+                        temporary.delete()
+                    }
+                }
+            } catch (ignored: IOException) {
+                return null
+            }
+        }
+
+        val executable = File(engineDir, ENGINE_EXECUTABLE)
+        if (!executable.setExecutable(true, true) || !executable.canExecute()) {
+            return null
+        }
+        return executable
+    }
+
+    private fun executeLlama(executable: File, modelFile: File, prompt: String): ProcessOutput {
+        val command = listOf(
+            executable.absolutePath,
+            "-m", modelFile.absolutePath,
+            "-c", "1024",
+            "-n", "96",
+            "--temp", "0.2",
+            "--top-p", "0.9",
+            "-st",
+            "--simple-io",
+            "--no-display-prompt",
+            "-p", prompt
+        )
+        return try {
+            val process = ProcessBuilder(command)
+                .directory(executable.parentFile)
+                .redirectErrorStream(true)
+                .apply {
+                    environment()["LD_LIBRARY_PATH"] = executable.parentFile?.absolutePath.orEmpty()
+                }
+                .start()
+            val output = StringBuilder()
+            val outputThread = Thread {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line -> output.appendLine(line) }
+                }
+            }.apply { start() }
+            if (!process.waitFor(25, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                outputThread.join(1000)
+                return ProcessOutput(
+                    errorCode = "GENERATION_TIMEOUT",
+                    errorMessage = "Qwen did not finish within the 25-second on-device limit."
+                )
+            }
+            outputThread.join(1000)
+            if (process.exitValue() != 0) {
+                return ProcessOutput(
+                    errorCode = "GENERATION_FAILED",
+                    errorMessage = output.toString().takeLast(800).ifBlank {
+                        "llama.cpp exited with code ${process.exitValue()}."
+                    }
+                )
+            }
+            ProcessOutput(output = output.toString())
+        } catch (error: Exception) {
+            ProcessOutput(
+                errorCode = "GENERATION_FAILED",
+                errorMessage = error.message ?: "Unable to start the on-device llama.cpp runtime."
+            )
+        }
+    }
+
+    private fun extractGeneratedText(output: String): String {
+        val afterPrompt = output.substringAfterLast("\n> ", output)
+        return afterPrompt
+            .substringBefore("\n[ Prompt:")
+            .substringBefore("\nExiting...")
+            .trim()
     }
 
     @Synchronized
