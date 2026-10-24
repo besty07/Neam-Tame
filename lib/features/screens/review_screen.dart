@@ -279,8 +279,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
               icon: Icons.privacy_tip_outlined,
               color: Colors.teal.shade900,
               backgroundColor: Colors.teal.shade50,
-              text:
-                  'Medical records stay strictly on-device. '
+              text: 'Medical records stay strictly on-device. '
                   'Recognized dates are for organization only and are not '
                   'medical advice.',
             ),

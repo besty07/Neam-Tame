@@ -107,9 +107,8 @@ class ScanScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 TextButton.icon(
                   key: const Key('scan_manual_entry_button'),
-                  onPressed: isProcessing
-                      ? null
-                      : () => _openManualReview(context),
+                  onPressed:
+                      isProcessing ? null : () => _openManualReview(context),
                   icon: const Icon(Icons.edit_note_outlined),
                   label: const Text('Enter Details Manually (OCR Fallback)'),
                 ),
