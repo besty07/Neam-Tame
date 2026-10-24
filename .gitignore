@@ -71,6 +71,11 @@ vault_storage/
 !assets/tessdata/eng.traineddata
 !assets/tessdata/.gitkeep
 
+# Ignore large GGUF / binary LLM weights to prevent repository bloat
+assets/models/*.gguf
+assets/models/*.bin
+!assets/models/.gitkeep
+
 # OS metadata
 .DS_Store
 Thumbs.db

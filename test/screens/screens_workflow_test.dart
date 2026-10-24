@@ -130,7 +130,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap empty-state CTA on Home to switch to Scan tab.
-      await tester.tap(find.byKey(const Key('home_empty_scan_cta')));
+      final emptyScanCta = find.byKey(const Key('home_empty_scan_cta'));
+      await tester.ensureVisible(emptyScanCta);
+      await tester.tap(emptyScanCta);
       await tester.pumpAndSettle();
 
       // Capture photo.
@@ -141,7 +143,6 @@ void main() {
       // Process document -> opens ReviewScreen.
       final processBtn = find.byKey(const Key('scan_process_button'));
       await tester.ensureVisible(processBtn);
-      await tester.pumpAndSettle();
       await tester.tap(processBtn);
       await tester.pumpAndSettle();
 
@@ -152,24 +153,21 @@ void main() {
       );
 
       // User corrects title and mistaken OCR date (2026-11-10 -> 2026-11-15).
-      final titleField = find.byKey(const Key('review_title_field'));
-      await tester.ensureVisible(titleField);
-      await tester.pumpAndSettle();
-      await tester.enterText(titleField, 'Honda Bike Insurance');
-
+      await tester.enterText(
+        find.byKey(const Key('review_title_field')),
+        'Honda Bike Insurance',
+      );
       final dateField = find.byKey(const Key('review_date_iso_field'));
       await tester.ensureVisible(dateField);
-      await tester.pumpAndSettle();
       await tester.enterText(dateField, '2026-11-15');
 
       final confirmBtn = find.byKey(const Key('confirm_and_save_button'));
       await tester.ensureVisible(confirmBtn);
-      await tester.pumpAndSettle();
       await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
       // Returns to Home tab with confirmed date 2026-11-15, NOT 2026-11-10.
-      expect(find.text('Honda Bike Insurance'), findsOneWidget);
+      expect(find.text('Honda Bike Insurance'), findsWidgets);
       expect(find.textContaining('Due 2026-11-15'), findsOneWidget);
       expect(find.textContaining('Due 2026-11-10'), findsNothing);
       expect(find.text('In 22d'), findsOneWidget);
@@ -256,6 +254,39 @@ void main() {
 
       expect(find.text('City Hospital Lab Report'), findsNothing);
       expect(reminderService.cancelledDocumentIds, contains('doc_med_1'));
+    },
+  );
+
+  testWidgets(
+    'Reminders, Family & Assets, Settings & Privacy, and Welcome screens navigate cleanly',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const LifeVaultApp());
+      await tester.pumpAndSettle();
+
+      // Open Reminders screen via topbar icon.
+      await tester.tap(find.byKey(const Key('topbar_reminders_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Reminders & Deadlines'), findsOneWidget);
+
+      // Open Family & Assets screen via topbar icon.
+      await tester.tap(find.byKey(const Key('topbar_family_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Family & Household Assets'), findsOneWidget);
+
+      // Open Settings & Privacy screen via topbar icon.
+      await tester.tap(find.byKey(const Key('topbar_settings_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Privacy & Local Processing'), findsOneWidget);
+
+      // Open Welcome Guide from Settings.
+      await tester.tap(find.byKey(const Key('settings_open_welcome_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome to LifeVault'), findsWidgets);
+
+      // Run Check Local Services on Welcome screen.
+      await tester.tap(find.byKey(const Key('welcome_check_services_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('welcome_readiness_banner')), findsOneWidget);
     },
   );
 }

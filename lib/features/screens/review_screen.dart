@@ -1,11 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/theme.dart';
 import '../../core/contracts/contracts.dart';
 
 /// Review & verification screen (Section 4: key conversion screen).
+///
+/// Renders a responsive split-screen on desktop (`>= 900px`) with the original
+/// document preview on the left and editable metadata + candidate dates on the
+/// right, and stacks panels vertically on mobile.
 class ReviewScreen extends StatefulWidget {
   const ReviewScreen({
     super.key,
@@ -46,7 +52,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
         existing?.title ?? _defaultTitleFor(_selectedCategory, _selectedType);
     _titleController = TextEditingController(text: initialTitle);
     _assetController = TextEditingController(
-      text: existing?.assetName ?? extraction.assetNameSuggestion ?? '',
+      text: existing?.assetName ??
+          widget.draft.initialAssetName ??
+          extraction.assetNameSuggestion ??
+          '',
     );
 
     String initialDate = '';
@@ -205,6 +214,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             provenance: chosenCandidate != null
                 ? EvidenceProvenance.userConfirmed
                 : EvidenceProvenance.manual,
+            reminderOffsetsDays: widget.controller.defaultReminderOffsets,
           ),
         );
       }
@@ -250,7 +260,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
     final extraction = widget.draft.extractionResult;
     final candidates = extraction.dateCandidates;
     final imageFile = File(widget.draft.imagePath);
-    final hasLocalFile = imageFile.existsSync();
+    final hasLocalFile = !kIsWeb && imageFile.existsSync();
 
     return Scaffold(
       appBar: AppBar(
@@ -260,64 +270,122 @@ class _ReviewScreenState extends State<ReviewScreen> {
               : 'Review & Confirm',
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _buildImagePreviewCard(imageFile, hasLocalFile),
-            const SizedBox(height: 12),
-            if (widget.draft.ocrErrorMessage != null) ...<Widget>[
-              _buildAlertBanner(
-                icon: Icons.warning_amber_rounded,
-                color: Colors.orange.shade800,
-                backgroundColor: Colors.orange.shade50,
-                text: widget.draft.ocrErrorMessage!,
+      bottomNavigationBar: _buildActionButtons(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWideDesktop = constraints.maxWidth >= 900;
+
+          if (isWideDesktop) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SizedBox(
+                    width: constraints.maxWidth * 0.42,
+                    child: ListView(
+                      children: <Widget>[
+                        _buildImagePreviewCard(
+                          imageFile,
+                          hasLocalFile,
+                          previewHeight: 360,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _buildRightPanelChildren(
+                          extraction,
+                          candidates,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-            ],
-            if (_selectedCategory == DocumentCategory.medical) ...<Widget>[
-              _buildAlertBanner(
-                icon: Icons.privacy_tip_outlined,
-                color: Colors.teal.shade900,
-                backgroundColor: Colors.teal.shade50,
-                text: 'Medical records stay strictly on-device. '
-                    'Recognized dates are for organization only and are not '
-                    'medical advice.',
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (_validationError != null) ...<Widget>[
-              _buildAlertBanner(
-                icon: Icons.error_outline,
-                color: Colors.red.shade900,
-                backgroundColor: Colors.red.shade50,
-                text: _validationError!,
-              ),
-              const SizedBox(height: 12),
-            ],
-            _buildMetadataSection(extraction),
-            const SizedBox(height: 16),
-            _buildCandidatesSection(candidates),
-            const SizedBox(height: 16),
-            _buildConfirmedDeadlineSection(),
-            const SizedBox(height: 24),
-            _buildActionButtons(),
-          ],
-        ),
+            );
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _buildImagePreviewCard(
+                  imageFile,
+                  hasLocalFile,
+                  previewHeight: 120,
+                ),
+                const SizedBox(height: 12),
+                ..._buildRightPanelChildren(extraction, candidates),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildImagePreviewCard(File imageFile, bool hasLocalFile) {
+  List<Widget> _buildRightPanelChildren(
+    ExtractionResult extraction,
+    List<DateCandidate> candidates,
+  ) {
+    return <Widget>[
+      if (widget.draft.ocrErrorMessage != null) ...<Widget>[
+        _buildAlertBanner(
+          icon: Icons.warning_amber_rounded,
+          color: LifeVaultColors.warning,
+          backgroundColor: LifeVaultColors.warningBackground,
+          text: widget.draft.ocrErrorMessage!,
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (_selectedCategory == DocumentCategory.medical) ...<Widget>[
+        _buildAlertBanner(
+          icon: Icons.privacy_tip_outlined,
+          color: LifeVaultColors.primary,
+          backgroundColor: LifeVaultColors.primaryLight,
+          text: 'Medical records stay strictly on-device. '
+              'Recognized dates are for organization only and are not '
+              'medical advice.',
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (_validationError != null) ...<Widget>[
+        _buildAlertBanner(
+          icon: Icons.error_outline,
+          color: LifeVaultColors.danger,
+          backgroundColor: LifeVaultColors.dangerBackground,
+          text: _validationError!,
+        ),
+        const SizedBox(height: 12),
+      ],
+      _buildMetadataSection(extraction),
+      const SizedBox(height: 16),
+      _buildCandidatesSection(candidates),
+      const SizedBox(height: 16),
+      _buildConfirmedDeadlineSection(),
+      const SizedBox(height: 16),
+    ];
+  }
+
+  Widget _buildImagePreviewCard(
+    File imageFile,
+    bool hasLocalFile, {
+    double previewHeight = 180,
+  }) {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Container(
-            height: 180,
-            color: Colors.grey.shade100,
+            height: previewHeight,
+            color: LifeVaultColors.surfaceSecondary,
             child: hasLocalFile
                 ? InteractiveViewer(
                     minScale: 1,
@@ -331,7 +399,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         const Icon(
                           Icons.description_outlined,
                           size: 44,
-                          color: Colors.blueGrey,
+                          color: LifeVaultColors.primary,
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -377,8 +445,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,14 +473,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
           children: <Widget>[
             Text(
               'Document Classification & Details',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             if (extraction.categoryEvidence != null &&
                 extraction.categoryEvidence!.isNotEmpty) ...<Widget>[
               const SizedBox(height: 6),
               Text(
                 'Suggested because: ${extraction.categoryEvidence}',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LifeVaultColors.textSecondary,
+                    ),
               ),
             ],
             const SizedBox(height: 12),
@@ -422,16 +494,15 @@ class _ReviewScreenState extends State<ReviewScreen> {
               decoration: const InputDecoration(
                 labelText: 'Document Title *',
                 hintText: 'e.g., Bike Insurance Policy',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<DocumentCategory>(
               key: const Key('review_category_dropdown'),
+              // ignore: deprecated_member_use
               value: _selectedCategory,
               decoration: const InputDecoration(
                 labelText: 'Category (Where do I find it?)',
-                border: OutlineInputBorder(),
               ),
               items: DocumentCategory.values.map((category) {
                 return DropdownMenuItem<DocumentCategory>(
@@ -450,10 +521,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
             const SizedBox(height: 12),
             DropdownButtonFormField<DocumentType>(
               key: const Key('review_type_dropdown'),
+              // ignore: deprecated_member_use
               value: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Document Type (What kind of document?)',
-                border: OutlineInputBorder(),
               ),
               items: DocumentType.values.map((type) {
                 return DropdownMenuItem<DocumentType>(
@@ -474,9 +545,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
               key: const Key('review_asset_field'),
               controller: _assetController,
               decoration: const InputDecoration(
-                labelText: 'Asset / Subject Name (Optional)',
+                labelText: 'Asset / Household Member (Optional)',
                 hintText: 'e.g., Bike, Fridge, Home Electricity',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -494,7 +564,9 @@ class _ReviewScreenState extends State<ReviewScreen> {
           children: <Widget>[
             Text(
               'Recognized Date Candidates (Proposed / Unverified)',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 8),
             if (candidates.isEmpty)
@@ -511,33 +583,37 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     ? 'AMBIGUOUS'
                     : (candidate.isDerived ? 'DERIVED PROPOSAL' : 'PROPOSED');
 
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : null,
-                  child: ListTile(
-                    key: Key('date_candidate_$index'),
-                    onTap: () => _selectCandidate(index, candidate),
-                    leading: Icon(
-                      isSelected
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                    ),
-                    title: Text(
-                      '${candidate.fieldKind.wireName.toUpperCase()}: '
-                      '${candidate.isoDate ?? candidate.rawText}',
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text('Snippet: "${candidate.sourceSnippet}"'),
-                        Text(
-                          'Status: $statusLabel • '
-                          'Confidence: ${candidate.confidenceLevel.wireName}'
-                          '${isDeadlineKind ? '' : ' (Non-deadline date)'}',
-                        ),
-                      ],
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Card(
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : LifeVaultColors.surfaceSecondary,
+                    child: ListTile(
+                      key: Key('date_candidate_$index'),
+                      onTap: () => _selectCandidate(index, candidate),
+                      leading: Icon(
+                        isSelected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: LifeVaultColors.primary,
+                      ),
+                      title: Text(
+                        '${candidate.fieldKind.wireName.toUpperCase()}: '
+                        '${candidate.isoDate ?? candidate.rawText}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Snippet: "${candidate.sourceSnippet}"'),
+                          Text(
+                            'Status: $statusLabel • '
+                            'Confidence: ${candidate.confidenceLevel.wireName}'
+                            '${isDeadlineKind ? '' : ' (Non-deadline date)'}',
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -557,15 +633,17 @@ class _ReviewScreenState extends State<ReviewScreen> {
           children: <Widget>[
             Text(
               'Confirmed Deadline (Creates Local Reminder)',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<DeadlineKind>(
               key: const Key('review_deadline_kind_dropdown'),
+              // ignore: deprecated_member_use
               value: _selectedDeadlineKind,
               decoration: const InputDecoration(
                 labelText: 'Deadline Type',
-                border: OutlineInputBorder(),
               ),
               items: DeadlineKind.values.map((kind) {
                 return DropdownMenuItem<DeadlineKind>(
@@ -591,7 +669,6 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Confirmed Date (YYYY-MM-DD)',
                       hintText: '2026-12-31',
-                      border: OutlineInputBorder(),
                     ),
                   ),
                 ),
@@ -611,7 +688,6 @@ class _ReviewScreenState extends State<ReviewScreen> {
               decoration: const InputDecoration(
                 labelText: 'Supporting Evidence Snippet (Optional)',
                 hintText: 'e.g., Policy Valid Upto 31/12/2026',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
@@ -621,30 +697,44 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 
   Widget _buildActionButtons() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        FilledButton.icon(
-          key: const Key('confirm_and_save_button'),
-          onPressed: _isSaving ? null : () => _handleSave(withDeadline: true),
-          icon: const Icon(Icons.verified_outlined),
-          label: const Text('Confirm & Save'),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: const BoxDecoration(
+        color: LifeVaultColors.surface,
+        border: Border(top: BorderSide(color: LifeVaultColors.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            TextButton.icon(
+              key: const Key('retry_scan_button'),
+              onPressed:
+                  _isSaving ? null : () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Retry scan'),
+            ),
+            OutlinedButton.icon(
+              key: const Key('save_without_deadline_button'),
+              onPressed:
+                  _isSaving ? null : () => _handleSave(withDeadline: false),
+              icon: const Icon(Icons.bookmark_border, size: 18),
+              label: const Text('Save without deadline'),
+            ),
+            FilledButton.icon(
+              key: const Key('confirm_and_save_button'),
+              onPressed:
+                  _isSaving ? null : () => _handleSave(withDeadline: true),
+              icon: const Icon(Icons.verified_outlined, size: 18),
+              label: const Text('Confirm & Save'),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          key: const Key('save_without_deadline_button'),
-          onPressed: _isSaving ? null : () => _handleSave(withDeadline: false),
-          icon: const Icon(Icons.bookmark_border),
-          label: const Text('Save without deadline'),
-        ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          key: const Key('retry_scan_button'),
-          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry scan'),
-        ),
-      ],
+      ),
     );
   }
 }

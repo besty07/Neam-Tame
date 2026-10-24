@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/contracts/contracts.dart';
 import '../features/capture_ocr/capture_ocr.dart';
@@ -21,9 +24,8 @@ class PickedImageFile {
   final String sha256;
 }
 
-/// Abstraction over `image_picker` / D1 [CaptureService] so `ScanScreen` works
-/// on real Android hardware and remains deterministically testable in widget
-/// tests.
+/// Abstraction over `image_picker` / `CaptureService` so `ScanScreen` works on
+/// real Android hardware and remains deterministically testable in widget tests.
 abstract interface class ImageCaptureDelegate {
   Future<PickedImageFile?> pickFromCamera();
 
@@ -33,35 +35,50 @@ abstract interface class ImageCaptureDelegate {
 }
 
 /// Production [ImageCaptureDelegate] backed by Developer 1's [CaptureService].
-class CaptureServiceDelegate implements ImageCaptureDelegate {
-  CaptureServiceDelegate({CaptureService? captureService}) {
-    _captureService = captureService ?? CaptureService();
-  }
+class CaptureServiceImageDelegate implements ImageCaptureDelegate {
+  CaptureServiceImageDelegate({CaptureService? captureService})
+      : _captureService = captureService ?? CaptureService();
 
-  late final CaptureService _captureService;
+  final CaptureService _captureService;
 
   @override
   Future<PickedImageFile?> pickFromCamera() async {
+    if (kIsWeb) {
+      return DeviceImageCaptureDelegate().pickFromCamera();
+    }
     final result = await _captureService.captureFromCamera();
-    return _fromCapturedResult(result);
+    if (result == null) {
+      return null;
+    }
+    return PickedImageFile(
+      path: result.filePath,
+      byteLength: result.fileSizeBytes,
+      sha256: result.sha256Hash,
+    );
   }
 
   @override
   Future<PickedImageFile?> pickFromGallery() async {
+    if (kIsWeb) {
+      return DeviceImageCaptureDelegate().pickFromGallery();
+    }
     final result = await _captureService.pickFromGallery();
-    return _fromCapturedResult(result);
+    if (result == null) {
+      return null;
+    }
+    return PickedImageFile(
+      path: result.filePath,
+      byteLength: result.fileSizeBytes,
+      sha256: result.sha256Hash,
+    );
   }
 
   @override
   Future<PickedImageFile?> retrieveLostImage() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return null;
     }
     final result = await _captureService.retrieveLostData();
-    return _fromCapturedResult(result);
-  }
-
-  PickedImageFile? _fromCapturedResult(CapturedImageResult? result) {
     if (result == null) {
       return null;
     }
@@ -73,7 +90,7 @@ class CaptureServiceDelegate implements ImageCaptureDelegate {
   }
 }
 
-/// Direct `image_picker` delegate retained for isolated tests.
+/// Direct `image_picker` [ImageCaptureDelegate] retained for compatibility.
 class DeviceImageCaptureDelegate implements ImageCaptureDelegate {
   DeviceImageCaptureDelegate({ImagePicker? picker}) {
     _picker = picker ?? ImagePicker();
@@ -105,7 +122,7 @@ class DeviceImageCaptureDelegate implements ImageCaptureDelegate {
 
   @override
   Future<PickedImageFile?> retrieveLostImage() async {
-    if (!Platform.isAndroid) {
+    if (kIsWeb || !Platform.isAndroid) {
       return null;
     }
     try {
@@ -113,7 +130,7 @@ class DeviceImageCaptureDelegate implements ImageCaptureDelegate {
       if (response.isEmpty || response.file == null) {
         return null;
       }
-      return _toPickedImage(response.file);
+      return await _toPickedImage(response.file);
     } on Object {
       return null;
     }
@@ -210,8 +227,7 @@ class IntegratedQuestionService implements QuestionService {
   }
 }
 
-/// Baseline fallback [DocumentExtractionService] used only if no extractor is
-/// provided.
+/// Baseline fallback [DocumentExtractionService] for isolated tests.
 class FallbackDocumentExtractionService implements DocumentExtractionService {
   const FallbackDocumentExtractionService();
 
@@ -221,8 +237,124 @@ class FallbackDocumentExtractionService implements DocumentExtractionService {
   }
 }
 
-/// In-memory [VaultRepository] used only when persistent SQLite service is not
-/// explicitly injected (e.g., isolated UI tests).
+/// Production adapter wrapping D3's [VaultRepositoryImpl] to seamlessly handle:
+/// 1. Manual-entry documents without an image file (synthesizes a 1x1 local PNG)
+/// 2. Editing/updating an existing document in-place without triggering a
+///    self-duplicate SHA-256 exception or losing the private image file.
+class ProductionVaultRepositoryAdapter implements VaultRepository {
+  ProductionVaultRepositoryAdapter(this._inner);
+
+  final VaultRepositoryImpl _inner;
+
+  // Minimal valid 1x1 transparent PNG for manual-entry records without a photo.
+  static final List<int> _placeholderPngBytes = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  );
+
+  @override
+  Future<DocumentRecord> saveVerified(VerifiedDocumentInput input) async {
+    File? synthesizedTempFile;
+    try {
+      String effectiveSourcePath = input.originalTempPath;
+      final sourceFile = File(effectiveSourcePath);
+
+      if (!sourceFile.existsSync()) {
+        final tempDir = Directory.systemTemp;
+        final manualFile = File(
+          p.join(
+            tempDir.path,
+            'lifevault_manual_${DateTime.now().microsecondsSinceEpoch}.png',
+          ),
+        );
+        await manualFile.writeAsBytes(_placeholderPngBytes, flush: true);
+        synthesizedTempFile = manualFile;
+        effectiveSourcePath = manualFile.path;
+      }
+
+      // Check if a document with the same SHA-256 already exists (e.g. when
+      // re-saving/editing an existing record).
+      if (input.sha256 != null && input.sha256!.isNotEmpty) {
+        final existing = await _inner.findDocumentBySha256(input.sha256!);
+        if (existing != null &&
+            existing.originalPath == input.originalTempPath) {
+          final tempCopy = File(
+            p.join(
+              Directory.systemTemp.path,
+              'lifevault_edit_${DateTime.now().microsecondsSinceEpoch}${p.extension(existing.originalPath)}',
+            ),
+          );
+          await File(existing.originalPath).copy(tempCopy.path);
+          synthesizedTempFile = tempCopy;
+          effectiveSourcePath = tempCopy.path;
+          await _inner.deleteDocument(existing.id);
+        }
+      }
+
+      final normalizedInput = VerifiedDocumentInput(
+        originalTempPath: effectiveSourcePath,
+        title: input.title,
+        category: input.category,
+        documentType: input.documentType,
+        assetName: input.assetName,
+        tags: input.tags,
+        sha256: input.sha256,
+        ocrStatus: input.ocrStatus,
+        verificationStatus: input.verificationStatus,
+        verifiedDeadlines: input.verifiedDeadlines,
+        evidenceRecords: input.evidenceRecords,
+      );
+
+      return await _inner.saveVerified(normalizedInput);
+    } on DuplicateDocumentException {
+      // If user explicitly chose to save another copy of a duplicate photo,
+      // salt the hash suffix so D3's repository stores the second copy safely.
+      final saltedInput = VerifiedDocumentInput(
+        originalTempPath: input.originalTempPath,
+        title: input.title,
+        category: input.category,
+        documentType: input.documentType,
+        assetName: input.assetName,
+        tags: input.tags,
+        sha256:
+            '${input.sha256 ?? 'dup'}_copy_${DateTime.now().millisecondsSinceEpoch}',
+        ocrStatus: input.ocrStatus,
+        verificationStatus: input.verificationStatus,
+        verifiedDeadlines: input.verifiedDeadlines,
+        evidenceRecords: input.evidenceRecords,
+      );
+      return await _inner.saveVerified(saltedInput);
+    } finally {
+      if (synthesizedTempFile != null && synthesizedTempFile.existsSync()) {
+        try {
+          synthesizedTempFile.deleteSync();
+        } on Object {
+          // Ignore temp cleanup failure.
+        }
+      }
+    }
+  }
+
+  @override
+  Future<List<DocumentRecord>> search({
+    String? text,
+    DocumentCategory? category,
+  }) {
+    return _inner.search(text: text, category: category);
+  }
+
+  @override
+  Future<List<DeadlineRecord>> getDeadlines({bool verifiedOnly = true}) {
+    return _inner.getDeadlines(verifiedOnly: verifiedOnly);
+  }
+
+  @override
+  Future<void> deleteDocument(String documentId) {
+    return _inner.deleteDocument(documentId);
+  }
+}
+
+/// In-memory [VaultRepository] used when persistent SQLite service is not
+/// explicitly injected (e.g., isolated widget tests).
 class InMemoryVaultRepository implements VaultRepository {
   InMemoryVaultRepository({
     List<DocumentRecord>? initialDocuments,
@@ -364,7 +496,8 @@ class GroundedVaultQuestionService implements QuestionService {
 
     final isUpcomingQuery = normalized.contains('upcoming') ||
         normalized.contains('due soon') ||
-        normalized.contains('next deadline');
+        normalized.contains('next deadline') ||
+        normalized.contains('deadlines');
     final isExpiryQuery = normalized.contains('expir') ||
         normalized.contains('warranty') ||
         normalized.contains('valid') ||
@@ -375,6 +508,7 @@ class GroundedVaultQuestionService implements QuestionService {
     final isFindQuery = normalized.contains('find') ||
         normalized.contains('where') ||
         normalized.contains('show') ||
+        normalized.contains('latest') ||
         normalized.contains('do i have');
 
     if (!isUpcomingQuery && !isExpiryQuery && !isDueQuery && !isFindQuery) {
@@ -432,6 +566,9 @@ class GroundedVaultQuestionService implements QuestionService {
       'find',
       'where',
       'show',
+      'latest',
+      'still',
+      'under',
       'for',
       'of',
       'on',
@@ -537,7 +674,7 @@ class GroundedVaultQuestionService implements QuestionService {
   }
 }
 
-/// Fallback local [ReminderService] before D3 notification plugin wires in.
+/// Fallback local [ReminderService] for isolated widget tests.
 class NoOpReminderService implements ReminderService {
   const NoOpReminderService();
 

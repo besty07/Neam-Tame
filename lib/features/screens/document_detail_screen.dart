@@ -1,29 +1,52 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/theme.dart';
 import '../../core/contracts/contracts.dart';
 import 'review_screen.dart';
+import 'widgets/action_playbook_card.dart';
 
 /// Document detail view displaying original image, metadata, verified
-/// deadlines, edit/recategorize action, and delete confirmation (Section 4).
-class DocumentDetailScreen extends StatelessWidget {
+/// deadlines, interactive Action Playbook, masked SHA-256 provenance,
+/// edit/recategorize action, and delete confirmation (P0 + Qwen Phase 3).
+class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
     super.key,
     required this.controller,
     required this.documentId,
+    this.highlightPlaybook = false,
   });
 
   final LifeVaultController controller;
   final String documentId;
+  final bool highlightPlaybook;
+
+  @override
+  State<DocumentDetailScreen> createState() => _DocumentDetailScreenState();
+}
+
+class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
+  bool _revealFullHash = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.controller.ensurePlaybookLoaded(widget.documentId);
+      }
+    });
+  }
 
   Future<void> _openEdit(BuildContext context, DocumentRecord document) async {
-    final draft = controller.createEditDraft(document);
+    final draft = widget.controller.createEditDraft(document);
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (context) => ReviewScreen(
-          controller: controller,
+          controller: widget.controller,
           draft: draft,
         ),
       ),
@@ -66,7 +89,7 @@ class DocumentDetailScreen extends StatelessWidget {
       return;
     }
 
-    await controller.deleteDocument(document.id);
+    await widget.controller.deleteDocument(document.id);
     if (context.mounted) {
       Navigator.of(context).pop(true);
     }
@@ -74,10 +97,13 @@ class DocumentDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final document = controller.findLoadedDocumentById(documentId);
+        final document = controller.findLoadedDocumentById(
+          widget.documentId,
+        );
         if (document == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Document Detail')),
@@ -88,10 +114,12 @@ class DocumentDetailScreen extends StatelessWidget {
         }
 
         final deadlines = controller.deadlinesForDocument(document.id);
+        final playbook = controller.playbookForDocument(document.id);
+        final isLoadingPlaybook = controller.isLoadingPlaybook(document.id);
         final imageFile = File(document.originalPath);
-        final hasLocalFile = imageFile.existsSync();
+        final hasLocalFile = !kIsWeb && imageFile.existsSync();
         final shortHash = document.sha256.length > 12
-            ? document.sha256.substring(0, 12)
+            ? '${document.sha256.substring(0, 8)}••••'
             : document.sha256;
 
         return Scaffold(
@@ -112,118 +140,183 @@ class DocumentDetailScreen extends StatelessWidget {
               ),
             ],
           ),
-          body: ListView(
+          body: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              Card(
-                clipBehavior: Clip.antiAlias,
-                child: Container(
-                  height: 240,
-                  color: Colors.grey.shade100,
-                  child: hasLocalFile
-                      ? InteractiveViewer(
-                          minScale: 1,
-                          maxScale: 4,
-                          child: Image.file(imageFile, fit: BoxFit.contain),
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: <Widget>[
-                              const Icon(
-                                Icons.insert_drive_file_outlined,
-                                size: 48,
-                                color: Colors.blueGrey,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Local Path: ${document.originalPath}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Container(
+                    height: 240,
+                    color: LifeVaultColors.surfaceSecondary,
+                    child: hasLocalFile
+                        ? InteractiveViewer(
+                            minScale: 1,
+                            maxScale: 4,
+                            child: Image.file(imageFile, fit: BoxFit.contain),
+                          )
+                        : Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                const Icon(
+                                  Icons.insert_drive_file_outlined,
+                                  size: 48,
+                                  color: LifeVaultColors.primary,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Local Vault Copy (${document.ocrStatus.wireName})',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Document Overview & Provenance',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Metadata & Provenance',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildInfoRow('Title', document.title),
-                      _buildInfoRow('Category', document.category.displayName),
-                      _buildInfoRow(
-                        'Document Type',
-                        document.documentType.displayName,
-                      ),
-                      if (document.assetName != null &&
-                          document.assetName!.isNotEmpty)
-                        _buildInfoRow('Asset / Subject', document.assetName!),
-                      _buildInfoRow(
-                        'Verification Status',
-                        document.verificationStatus.wireName,
-                      ),
-                      _buildInfoRow('OCR Status', document.ocrStatus.wireName),
-                      _buildInfoRow('SHA-256 Prefix', shortHash),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        'Verified Deadlines',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      if (deadlines.isEmpty)
-                        const Text('No confirmed deadlines recorded.')
-                      else
-                        ...deadlines.map((deadline) {
-                          final pageNum = deadline.page ?? 1;
-                          String evidenceText =
-                              'Confirmed manually (p.$pageNum)';
-                          if (deadline.evidenceSnippet != null &&
-                              deadline.evidenceSnippet!.isNotEmpty) {
-                            evidenceText = 'Evidence (p.$pageNum): '
-                                '"${deadline.evidenceSnippet}"';
-                          }
-                          return ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.event_available_outlined),
-                            title: Text(
-                              '${deadline.kind.displayName}: '
-                              '${deadline.dateIso}',
+                        const SizedBox(height: 12),
+                        _buildInfoRow('Title', document.title),
+                        _buildInfoRow(
+                          'Category',
+                          document.category.displayName,
+                        ),
+                        _buildInfoRow(
+                          'Document Type',
+                          document.documentType.displayName,
+                        ),
+                        if (document.assetName != null &&
+                            document.assetName!.isNotEmpty)
+                          _buildInfoRow('Asset / Subject', document.assetName!),
+                        _buildInfoRow(
+                          'Verification Status',
+                          document.verificationStatus.wireName,
+                        ),
+                        _buildInfoRow(
+                            'OCR Status', document.ocrStatus.wireName),
+                        Row(
+                          children: <Widget>[
+                            const SizedBox(
+                              width: 140,
+                              child: Text(
+                                'SHA-256 Digest',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
                             ),
-                            subtitle: Text(evidenceText),
-                            trailing: OutlinedButton(
+                            Expanded(
+                              child: Text(
+                                _revealFullHash ? document.sha256 : shortHash,
+                              ),
+                            ),
+                            TextButton(
+                              key: const Key('detail_toggle_hash_mask'),
                               onPressed: () {
-                                controller.scheduleReminderForDeadline(
-                                  deadline,
-                                );
+                                setState(() {
+                                  _revealFullHash = !_revealFullHash;
+                                });
                               },
-                              child: const Text('Remind me'),
+                              child: Text(_revealFullHash ? 'Mask' : 'Reveal'),
                             ),
-                          );
-                        }),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                'Important Dates & Reminders',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _openEdit(context, document),
+                              icon: const Icon(Icons.edit_calendar_outlined),
+                              label: Text(
+                                deadlines.isEmpty ? 'Add Date' : 'Edit Date',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        if (deadlines.isEmpty)
+                          const Text('No confirmed deadlines recorded.')
+                        else
+                          ...deadlines.map((deadline) {
+                            final pageNum = deadline.page ?? 1;
+                            String evidenceText =
+                                'Confirmed manually (p.$pageNum)';
+                            if (deadline.evidenceSnippet != null &&
+                                deadline.evidenceSnippet!.isNotEmpty) {
+                              evidenceText = 'Evidence (p.$pageNum): '
+                                  '"${deadline.evidenceSnippet}"';
+                            }
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(
+                                Icons.event_available_outlined,
+                                color: LifeVaultColors.primary,
+                              ),
+                              title: Text(
+                                '${deadline.kind.displayName}: '
+                                '${deadline.dateIso}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(evidenceText),
+                              trailing: OutlinedButton(
+                                onPressed: () {
+                                  controller.scheduleReminderForDeadline(
+                                    deadline,
+                                  );
+                                },
+                                child: const Text('Remind me'),
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ActionPlaybookCard(
+                  playbook: playbook,
+                  isLoading: isLoadingPlaybook,
+                  isHighlighted: widget.highlightPlaybook,
+                  onToggleStep: (stepId) {
+                    controller.togglePlaybookStep(document.id, stepId);
+                  },
+                ),
+              ],
+            ),
           ),
         );
       },

@@ -319,3 +319,14 @@ enum AnswerStatus {
     return AnswerStatus.unsupportedQuestion;
   }
 }
+
+/// Engine source that produced an [ActionPlaybook].
+enum PlaybookSource {
+  qwen('qwen', 'Qwen-0.6B On-Device'),
+  deterministicFallback('deterministic_fallback', 'Verified Offline Playbook');
+
+  const PlaybookSource(this.wireName, this.displayName);
+
+  final String wireName;
+  final String displayName;
+}
