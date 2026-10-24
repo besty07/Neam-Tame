@@ -43,6 +43,7 @@ class LifeVaultOcrChannel(
         private const val MAX_IMAGE_DIMENSION = 2400
         private const val ASSET_MODEL_PATH = "flutter_assets/assets/tessdata/eng.traineddata"
         private const val EXPECTED_MODEL_SIZE = 4113088L
+        private const val EXPECTED_ENG_HASH = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
 
         /**
          * Convenience registration method for Developer 4 to wire into `MainActivity.kt`:
@@ -209,16 +210,14 @@ class LifeVaultOcrChannel(
         } finally {
             try {
                 tessBaseApi.recycle()
-            } catch (_: Exception) {
+            } catch (ignored: Exception) {
             }
             try {
                 bitmap.recycle()
-            } catch (_: Exception) {
+            } catch (ignored: Exception) {
             }
         }
     }
-
-    private const val EXPECTED_ENG_HASH = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
 
     /**
      * Copies the bundled model asset into `<filesDir>/tessdata/<language>.traineddata`
@@ -239,7 +238,7 @@ class LifeVaultOcrChannel(
 
         val assetManager = context.assets
         val candidates = listOf(
-            try { io.flutter.FlutterInjector.instance().flutterLoader().getLookupKeyForAsset("assets/tessdata/$language.traineddata") } catch (_: Exception) { null },
+            try { io.flutter.FlutterInjector.instance().flutterLoader().getLookupKeyForAsset("assets/tessdata/$language.traineddata") } catch (ignored: Exception) { null },
             ASSET_MODEL_PATH,
             "flutter_assets/assets/tessdata/$language.traineddata",
             "assets/tessdata/$language.traineddata"
@@ -250,7 +249,7 @@ class LifeVaultOcrChannel(
             try {
                 inputStream = assetManager.open(candidate)
                 if (inputStream != null) break
-            } catch (_: IOException) {
+            } catch (ignored: IOException) {
             }
         }
 
@@ -330,7 +329,7 @@ class LifeVaultOcrChannel(
         val orientation = try {
             val exif = ExifInterface(imagePath)
             exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        } catch (_: IOException) {
+        } catch (ignored: IOException) {
             ExifInterface.ORIENTATION_NORMAL
         }
 
