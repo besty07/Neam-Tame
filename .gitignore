@@ -1,0 +1,77 @@
+# =============================================================================
+# LifeVault v0.1 — Privacy-First & Flutter .gitignore (Owned by Dev 4)
+# =============================================================================
+
+# Flutter / Dart / Pub build & tool artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+.metadata
+
+# Android / Gradle build intermediates & local configs
+android/.gradle/
+android/captures/
+android/local.properties
+android/GeneratedPluginRegistrant.java
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.apk
+*.aab
+*.dex
+*.class
+*.ap_
+
+# Signing keys, secrets, and environment files (NEVER commit)
+*.jks
+*.keystore
+*.p12
+*.key
+*.pem
+key.properties
+.env
+.env.*
+
+# Private household documents, databases, images, OCR outputs, and exports
+# (Rule 0.5: Never commit real papers, photos, local DBs, OCR logs, or exports)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.ics
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.heic
+*ocr_log*
+*ocr_output*
+private_samples/
+user_data/
+vault_storage/
+
+# Explicitly allow Android app launcher/resource icons if needed
+!android/app/src/main/res/**/*.png
+!android/app/src/main/res/**/*.webp
+
+# Explicitly allow required licensed offline OCR traineddata (Apache 2.0)
+!assets/tessdata/eng.traineddata
+!assets/tessdata/.gitkeep
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
