@@ -2,7 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'app/boot.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const LifeVaultApp());
+  LifeVaultDependencies dependencies;
+  try {
+    dependencies = await LifeVaultDependencies.createProduction();
+  } on Object {
+    dependencies = LifeVaultDependencies.createDefault();
+  }
+  runApp(LifeVaultApp(dependencies: dependencies));
 }

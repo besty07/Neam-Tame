@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/contracts/contracts.dart';
+import '../features/capture_ocr/capture_ocr.dart';
+import '../features/vault/vault.dart';
 
 /// Picked image metadata returned by [ImageCaptureDelegate].
 class PickedImageFile {
@@ -19,8 +21,9 @@ class PickedImageFile {
   final String sha256;
 }
 
-/// Abstraction over `image_picker` so `ScanScreen` works on real Android
-/// hardware and remains deterministically testable in widget tests.
+/// Abstraction over `image_picker` / D1 [CaptureService] so `ScanScreen` works
+/// on real Android hardware and remains deterministically testable in widget
+/// tests.
 abstract interface class ImageCaptureDelegate {
   Future<PickedImageFile?> pickFromCamera();
 
@@ -29,7 +32,48 @@ abstract interface class ImageCaptureDelegate {
   Future<PickedImageFile?> retrieveLostImage();
 }
 
-/// Production [ImageCaptureDelegate] backed by Flutter `image_picker`.
+/// Production [ImageCaptureDelegate] backed by Developer 1's [CaptureService].
+class CaptureServiceDelegate implements ImageCaptureDelegate {
+  CaptureServiceDelegate({CaptureService? captureService}) {
+    _captureService = captureService ?? CaptureService();
+  }
+
+  late final CaptureService _captureService;
+
+  @override
+  Future<PickedImageFile?> pickFromCamera() async {
+    final result = await _captureService.captureFromCamera();
+    return _fromCapturedResult(result);
+  }
+
+  @override
+  Future<PickedImageFile?> pickFromGallery() async {
+    final result = await _captureService.pickFromGallery();
+    return _fromCapturedResult(result);
+  }
+
+  @override
+  Future<PickedImageFile?> retrieveLostImage() async {
+    if (!Platform.isAndroid) {
+      return null;
+    }
+    final result = await _captureService.retrieveLostData();
+    return _fromCapturedResult(result);
+  }
+
+  PickedImageFile? _fromCapturedResult(CapturedImageResult? result) {
+    if (result == null) {
+      return null;
+    }
+    return PickedImageFile(
+      path: result.filePath,
+      byteLength: result.fileSizeBytes,
+      sha256: result.sha256Hash,
+    );
+  }
+}
+
+/// Direct `image_picker` delegate retained for isolated tests.
 class DeviceImageCaptureDelegate implements ImageCaptureDelegate {
   DeviceImageCaptureDelegate({ImagePicker? picker}) {
     _picker = picker ?? ImagePicker();
@@ -141,7 +185,33 @@ class MethodChannelOfflineOcrService implements OfflineOcrService {
   }
 }
 
-/// Baseline fallback [DocumentExtractionService] used until D2 module wires in.
+/// Production [QuestionService] adapter delegating to Developer 3's
+/// [QuestionServiceImpl] and normalizing suggested chip queries such as
+/// `"fridge warranty"`.
+class IntegratedQuestionService implements QuestionService {
+  const IntegratedQuestionService(this._delegate);
+
+  final QuestionServiceImpl _delegate;
+
+  @override
+  Future<AnswerResult> answer(String question) async {
+    final primary = await _delegate.answer(question);
+    if (primary.status != AnswerStatus.unsupportedQuestion) {
+      return primary;
+    }
+    final normalized = question.trim().toLowerCase();
+    if (normalized.contains('warranty') || normalized.contains('policy')) {
+      return _delegate.answer('$question expiry');
+    }
+    if (normalized.contains('bill')) {
+      return _delegate.answer('$question due');
+    }
+    return primary;
+  }
+}
+
+/// Baseline fallback [DocumentExtractionService] used only if no extractor is
+/// provided.
 class FallbackDocumentExtractionService implements DocumentExtractionService {
   const FallbackDocumentExtractionService();
 

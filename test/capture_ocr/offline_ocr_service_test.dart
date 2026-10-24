@@ -65,7 +65,8 @@ void main() {
         };
       });
 
-      final OcrOutput output = await ocrService.recognizeImage(sampleImageFile.path);
+      final OcrOutput output =
+          await ocrService.recognizeImage(sampleImageFile.path);
 
       expect(output.isSuccess, isTrue);
       expect(output.errorCode, isNull);
@@ -90,7 +91,8 @@ void main() {
         };
       });
 
-      final OcrOutput output = await ocrService.recognizeImage(sampleImageFile.path);
+      final OcrOutput output =
+          await ocrService.recognizeImage(sampleImageFile.path);
 
       expect(output.isSuccess, isFalse);
       expect(output.errorCode, 'MODEL_MISSING');
@@ -112,7 +114,8 @@ void main() {
         };
       });
 
-      final OcrOutput output = await ocrService.recognizeImage(sampleImageFile.path);
+      final OcrOutput output =
+          await ocrService.recognizeImage(sampleImageFile.path);
 
       expect(output.isSuccess, isFalse);
       expect(output.errorCode, 'OCR_FAILED');
@@ -128,7 +131,8 @@ void main() {
         );
       });
 
-      final OcrOutput output = await ocrService.recognizeImage(sampleImageFile.path);
+      final OcrOutput output =
+          await ocrService.recognizeImage(sampleImageFile.path);
 
       expect(output.isSuccess, isFalse);
       expect(output.errorCode, 'CHANNEL_CRASH');
@@ -142,7 +146,8 @@ void main() {
         return null;
       });
 
-      final OcrOutput output = await ocrService.recognizeImage(sampleImageFile.path);
+      final OcrOutput output =
+          await ocrService.recognizeImage(sampleImageFile.path);
 
       expect(output.isSuccess, isFalse);
       expect(output.errorCode, 'OCR_FAILED');
