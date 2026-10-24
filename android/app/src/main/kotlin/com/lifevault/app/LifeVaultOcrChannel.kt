@@ -218,9 +218,11 @@ class LifeVaultOcrChannel(
         }
     }
 
+    private const val EXPECTED_ENG_HASH = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+
     /**
      * Copies the bundled model asset into `<filesDir>/tessdata/<language>.traineddata`
-     * if it does not already exist or if size is corrupt.
+     * with a one-time hash check per Section 7.1 of Master Implementation Plan.
      */
     @Synchronized
     private fun ensureModelAssetExists(tessDataDir: File, modelFile: File, language: String) {
@@ -228,22 +230,68 @@ class LifeVaultOcrChannel(
             tessDataDir.mkdirs()
         }
 
-        if (modelFile.exists() && modelFile.length() > 0) {
-            // Already initialized
-            return
+        // One-time verification: if model exists and hash matches, reuse directly.
+        if (modelFile.exists() && modelFile.length() == EXPECTED_MODEL_SIZE) {
+            if (language != "eng" || computeSha256(modelFile).equals(EXPECTED_ENG_HASH, ignoreCase = true)) {
+                return
+            }
         }
 
-        val assetPath = if (language == "eng") {
-            ASSET_MODEL_PATH
-        } else {
-            "flutter_assets/assets/tessdata/$language.traineddata"
+        val assetManager = context.assets
+        val candidates = listOf(
+            try { io.flutter.FlutterInjector.instance().flutterLoader().getLookupKeyForAsset("assets/tessdata/$language.traineddata") } catch (_: Exception) { null },
+            ASSET_MODEL_PATH,
+            "flutter_assets/assets/tessdata/$language.traineddata",
+            "assets/tessdata/$language.traineddata"
+        ).filterNotNull()
+
+        var inputStream: java.io.InputStream? = null
+        for (candidate in candidates) {
+            try {
+                inputStream = assetManager.open(candidate)
+                if (inputStream != null) break
+            } catch (_: IOException) {
+            }
         }
 
-        context.assets.open(assetPath).use { input ->
-            FileOutputStream(modelFile).use { output ->
+        if (inputStream == null) {
+            throw IOException("Could not locate asset for $language.traineddata in APK")
+        }
+
+        val tempFile = File(tessDataDir, "$language.traineddata.tmp")
+        inputStream.use { input ->
+            FileOutputStream(tempFile).use { output ->
                 input.copyTo(output)
             }
         }
+
+        if (language == "eng") {
+            val hash = computeSha256(tempFile)
+            if (!hash.equals(EXPECTED_ENG_HASH, ignoreCase = true)) {
+                tempFile.delete()
+                throw IllegalStateException("Copied model hash ($hash) does not match expected SHA-256 ($EXPECTED_ENG_HASH)")
+            }
+        }
+
+        if (modelFile.exists()) {
+            modelFile.delete()
+        }
+        if (!tempFile.renameTo(modelFile)) {
+            tempFile.copyTo(modelFile, overwrite = true)
+            tempFile.delete()
+        }
+    }
+
+    private fun computeSha256(file: File): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /**

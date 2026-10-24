@@ -70,7 +70,7 @@ class OfflineOcrServiceImpl implements OfflineOcrService {
       final String? errorMessage = result['errorMessage'] as String?;
       final String text = (result['text'] as String?) ?? '';
       final double? confidence = (result['confidence'] as num?)?.toDouble();
-      final int? processingMs = (result['processingMs'] as num?)?.toInt() ??
+      final int processingMs = (result['processingMs'] as num?)?.toInt() ??
           stopwatch.elapsedMilliseconds;
       final int page = (result['page'] as num?)?.toInt() ?? 1;
 
