@@ -6,16 +6,15 @@
         android:name="android.permission.INTERNET"
         tools:node="remove" />
 
-    <!-- D3: Android 13+ local notification permission for deadline reminders -->
+    <!-- Android 13+ local notification permission for deadline reminders (D3) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- D3: Required by flutter_local_notifications for rescheduling after reboot -->
+    <!-- Local notification reschedule after device reboot (D3, inexact alarms only) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="LifeVault"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules">
@@ -36,7 +35,7 @@
             </intent-filter>
         </activity>
 
-        <!-- D3: Local notification receivers (flutter_local_notifications v17+) -->
+        <!-- D3: Required by flutter_local_notifications for scheduling after reboot -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
             android:exported="false">

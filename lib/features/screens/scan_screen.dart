@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
 import '../../app/default_services.dart';
+import '../../app/theme.dart';
 import '../../core/contracts/contracts.dart';
 import 'document_detail_screen.dart';
 import 'review_screen.dart';
@@ -72,86 +74,100 @@ class ScanScreen extends StatelessWidget {
     final errorMessage = controller.scanErrorMessage;
     final isProcessing = controller.isProcessingScan;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: <Widget>[
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  'Add a Document',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'All OCR and date extraction happens offline on your '
+                  'Android device. Nothing is uploaded.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: LifeVaultColors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: FilledButton.icon(
+                        key: const Key('scan_take_photo_button'),
+                        onPressed:
+                            isProcessing ? null : controller.pickFromCamera,
+                        icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                        label: const Text('Take Photo'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const Key('scan_choose_gallery_button'),
+                        onPressed:
+                            isProcessing ? null : controller.pickFromGallery,
+                        icon:
+                            const Icon(Icons.photo_library_outlined, size: 18),
+                        label: const Text('Choose from Gallery'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  key: const Key('scan_manual_entry_button'),
+                  onPressed:
+                      isProcessing ? null : () => _openManualReview(context),
+                  icon: const Icon(Icons.edit_note_outlined, size: 18),
+                  label: const Text('Enter Details Manually (OCR Fallback)'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (errorMessage != null) ...<Widget>[
+          const SizedBox(height: 10),
           Card(
+            color: LifeVaultColors.dangerBackground,
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+              padding: const EdgeInsets.all(12),
+              child: Row(
                 children: <Widget>[
-                  Text(
-                    'Capture or Import Document',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'All OCR and date extraction happens offline on your '
-                    'Android device. Nothing is uploaded.',
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    key: const Key('scan_take_photo_button'),
-                    onPressed: isProcessing ? null : controller.pickFromCamera,
-                    icon: const Icon(Icons.camera_alt_outlined),
-                    label: const Text('Take Photo'),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    key: const Key('scan_choose_gallery_button'),
-                    onPressed: isProcessing ? null : controller.pickFromGallery,
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text('Choose from Gallery'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    key: const Key('scan_manual_entry_button'),
-                    onPressed:
-                        isProcessing ? null : () => _openManualReview(context),
-                    icon: const Icon(Icons.edit_note_outlined),
-                    label: const Text('Enter Details Manually (OCR Fallback)'),
+                  const Icon(Icons.error_outline,
+                      color: LifeVaultColors.danger),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      errorMessage,
+                      style: const TextStyle(color: LifeVaultColors.danger),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          if (errorMessage != null) ...<Widget>[
-            const SizedBox(height: 12),
-            Card(
-              color: Colors.red.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.error_outline, color: Colors.red.shade900),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        errorMessage,
-                        style: TextStyle(color: Colors.red.shade900),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          if (duplicateDoc != null) ...<Widget>[
-            const SizedBox(height: 12),
-            _buildDuplicateBanner(context, duplicateDoc),
-          ],
-          if (isProcessing) ...<Widget>[
-            const SizedBox(height: 16),
-            _buildProcessingStateCard(context),
-          ] else if (selectedFile != null) ...<Widget>[
-            const SizedBox(height: 16),
-            _buildSelectedPreviewCard(context, selectedFile),
-          ],
         ],
-      ),
+        if (duplicateDoc != null) ...<Widget>[
+          const SizedBox(height: 10),
+          _buildDuplicateBanner(context, duplicateDoc),
+        ],
+        if (isProcessing) ...<Widget>[
+          const SizedBox(height: 10),
+          _buildProcessingStateCard(context),
+        ] else if (selectedFile != null) ...<Widget>[
+          const SizedBox(height: 10),
+          _buildSelectedPreviewCard(context, selectedFile),
+        ],
+      ],
     );
   }
 
@@ -160,34 +176,34 @@ class ScanScreen extends StatelessWidget {
     DocumentRecord duplicate,
   ) {
     return Card(
-      color: Colors.amber.shade50,
+      color: LifeVaultColors.warningBackground,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
+            const Row(
               children: <Widget>[
-                Icon(Icons.copy_all_outlined, color: Colors.amber.shade900),
-                const SizedBox(width: 8),
+                Icon(Icons.copy_all_outlined, color: LifeVaultColors.warning),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Duplicate Photo Detected (Matching SHA-256)',
                     style: TextStyle(
-                      color: Colors.amber.shade900,
+                      color: LifeVaultColors.warning,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               'This image matches "${duplicate.title}" '
               '(${duplicate.category.displayName}). You can open the existing '
               'record or continue to save another labeled copy.',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             OutlinedButton.icon(
               key: const Key('scan_open_duplicate_button'),
               onPressed: () => _openDuplicateDoc(context, duplicate),
@@ -204,22 +220,22 @@ class ScanScreen extends StatelessWidget {
     return Card(
       key: const Key('scan_processing_card'),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: <Widget>[
             const CircularProgressIndicator(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             Text(
               'Running Offline OCR & Date Extraction...',
               style: Theme.of(context).textTheme.titleMedium,
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             const Text(
               'Recognizing printed English text locally using Tesseract.',
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             OutlinedButton.icon(
               key: const Key('scan_cancel_button'),
               onPressed: controller.cancelScanProcessing,
@@ -237,7 +253,7 @@ class ScanScreen extends StatelessWidget {
     PickedImageFile pickedFile,
   ) {
     final file = File(pickedFile.path);
-    final exists = file.existsSync();
+    final exists = !kIsWeb && file.existsSync();
     final kb = (pickedFile.byteLength / 1024).toStringAsFixed(1);
     final shortSha = pickedFile.sha256.length > 12
         ? pickedFile.sha256.substring(0, 12)
@@ -250,8 +266,8 @@ class ScanScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Container(
-            height: 200,
-            color: Colors.grey.shade100,
+            height: 84,
+            color: LifeVaultColors.surfaceSecondary,
             child: exists
                 ? Image.file(file, fit: BoxFit.contain)
                 : Center(
@@ -260,17 +276,17 @@ class ScanScreen extends StatelessWidget {
                       children: <Widget>[
                         const Icon(
                           Icons.image_outlined,
-                          size: 48,
-                          color: Colors.teal,
+                          size: 28,
+                          color: LifeVaultColors.primary,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Text('Selected: ${pickedFile.path}'),
                       ],
                     ),
                   ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
@@ -278,18 +294,18 @@ class ScanScreen extends StatelessWidget {
                   'File size: $kb KB • SHA-256: $shortSha...',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 FilledButton.icon(
                   key: const Key('scan_process_button'),
                   onPressed: () => _processAndOpenReview(context),
-                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
                   label: const Text('Process Document'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 OutlinedButton.icon(
                   key: const Key('scan_retake_button'),
                   onPressed: controller.clearSelectedScanFile,
-                  icon: const Icon(Icons.replay_outlined),
+                  icon: const Icon(Icons.replay_outlined, size: 18),
                   label: const Text('Retake / Choose Another'),
                 ),
               ],

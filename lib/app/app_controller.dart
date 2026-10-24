@@ -1,10 +1,45 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../core/contracts/contracts.dart';
-import '../features/vault/vault.dart';
 import 'default_services.dart';
+
+/// Sort options for the Document Library (`VaultScreen`).
+enum VaultSortOrder {
+  newest('Newest First'),
+  oldest('Oldest First'),
+  approachingDeadline('Approaching Deadline');
+
+  const VaultSortOrder(this.label);
+  final String label;
+}
+
+/// Filter options for the Reminders view (`RemindersScreen`).
+enum ReminderFilter {
+  all('All Deadlines'),
+  overdue('Overdue'),
+  dueSoon('Due within 30d'),
+  later('Upcoming Later');
+
+  const ReminderFilter(this.label);
+  final String label;
+}
+
+/// Summary of a household member or asset and its linked documents/deadlines.
+class HouseholdEntitySummary {
+  const HouseholdEntitySummary({
+    required this.name,
+    required this.kind,
+    required this.documentCount,
+    required this.upcomingDeadlineCount,
+    this.nearestDeadlineIso,
+  });
+
+  final String name;
+  final String kind; // 'member' or 'asset'
+  final int documentCount;
+  final int upcomingDeadlineCount;
+  final String? nearestDeadlineIso;
+}
 
 /// Draft state passed into `ReviewScreen` from `ScanScreen` or from an
 /// existing `DocumentRecord` edit action.
@@ -17,6 +52,7 @@ class PendingReviewDraft {
     this.existingDocument,
     this.existingDeadlines = const <DeadlineRecord>[],
     this.ocrErrorMessage,
+    this.initialAssetName,
   });
 
   final String imagePath;
@@ -26,6 +62,7 @@ class PendingReviewDraft {
   final DocumentRecord? existingDocument;
   final List<DeadlineRecord> existingDeadlines;
   final String? ocrErrorMessage;
+  final String? initialAssetName;
 }
 
 /// View-model item pairing a verified [DeadlineRecord] with its parent
@@ -42,6 +79,7 @@ class DashboardDeadlineItem {
   final int daysRemaining;
 
   bool get isOverdue => daysRemaining < 0;
+  bool get isDueSoon => daysRemaining >= 0 && daysRemaining <= 14;
   bool get isWithinNext30Days => daysRemaining >= 0 && daysRemaining <= 30;
 }
 
@@ -55,82 +93,12 @@ class LifeVaultController extends ChangeNotifier {
     required this.reminderService,
     required this.captureDelegate,
     DateTime Function()? nowProvider,
+    this.isPersistentStorage = false,
   }) {
     _nowProvider = nowProvider ?? DateTime.now;
   }
 
   static const int maxImageBytes = 12 * 1024 * 1024;
-
-  // Minimal valid 1x1 PNG used when a manual entry is saved without a photo.
-  static const List<int> _manualPlaceholderPng = <int>[
-    0x89,
-    0x50,
-    0x4E,
-    0x47,
-    0x0D,
-    0x0A,
-    0x1A,
-    0x0A,
-    0x00,
-    0x00,
-    0x00,
-    0x0D,
-    0x49,
-    0x48,
-    0x44,
-    0x52,
-    0x00,
-    0x00,
-    0x00,
-    0x01,
-    0x00,
-    0x00,
-    0x00,
-    0x01,
-    0x08,
-    0x06,
-    0x00,
-    0x00,
-    0x00,
-    0x1F,
-    0x15,
-    0xC4,
-    0x89,
-    0x00,
-    0x00,
-    0x00,
-    0x0A,
-    0x49,
-    0x44,
-    0x41,
-    0x54,
-    0x78,
-    0x9C,
-    0x63,
-    0x00,
-    0x01,
-    0x00,
-    0x00,
-    0x05,
-    0x00,
-    0x01,
-    0x0D,
-    0x0A,
-    0x2D,
-    0xB4,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x49,
-    0x45,
-    0x4E,
-    0x44,
-    0xAE,
-    0x42,
-    0x60,
-    0x82,
-  ];
 
   final OfflineOcrService ocrService;
   final DocumentExtractionService extractionService;
@@ -138,6 +106,7 @@ class LifeVaultController extends ChangeNotifier {
   final QuestionService questionService;
   final ReminderService reminderService;
   final ImageCaptureDelegate captureDelegate;
+  final bool isPersistentStorage;
   late final DateTime Function() _nowProvider;
 
   int _activeTabIndex = 0;
@@ -151,6 +120,19 @@ class LifeVaultController extends ChangeNotifier {
 
   String _vaultSearchQuery = '';
   DocumentCategory? _selectedCategoryFilter;
+  String? _selectedAssetFilter;
+  VaultSortOrder _vaultSortOrder = VaultSortOrder.newest;
+  bool _isVaultGridView = false;
+
+  ReminderFilter _reminderFilter = ReminderFilter.all;
+  List<int> _defaultReminderOffsets = const <int>[30, 7, 1];
+  final Set<String> _completedDeadlineIds = <String>{};
+
+  final List<String> _customMembers = <String>['Primary Household'];
+  final List<String> _customAssets = <String>[];
+
+  ThemeMode _themeMode = ThemeMode.light;
+  String? _lastServiceCheckSummary;
 
   PickedImageFile? _selectedScanFile;
   DocumentRecord? _duplicateExistingDoc;
@@ -171,6 +153,16 @@ class LifeVaultController extends ChangeNotifier {
 
   String get vaultSearchQuery => _vaultSearchQuery;
   DocumentCategory? get selectedCategoryFilter => _selectedCategoryFilter;
+  String? get selectedAssetFilter => _selectedAssetFilter;
+  VaultSortOrder get vaultSortOrder => _vaultSortOrder;
+  bool get isVaultGridView => _isVaultGridView;
+
+  ReminderFilter get reminderFilter => _reminderFilter;
+  List<int> get defaultReminderOffsets => _defaultReminderOffsets;
+  Set<String> get completedDeadlineIds => _completedDeadlineIds;
+
+  ThemeMode get themeMode => _themeMode;
+  String? get lastServiceCheckSummary => _lastServiceCheckSummary;
 
   PickedImageFile? get selectedScanFile => _selectedScanFile;
   DocumentRecord? get duplicateExistingDoc => _duplicateExistingDoc;
@@ -190,6 +182,12 @@ class LifeVaultController extends ChangeNotifier {
     return _allDocuments.where((doc) {
       return !doc.verificationStatus.isUserVerified;
     }).toList();
+  }
+
+  List<DocumentRecord> get recentDocuments {
+    final sorted = List<DocumentRecord>.from(_allDocuments)
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return sorted.take(5).toList();
   }
 
   List<DashboardDeadlineItem> get dashboardDeadlineItems {
@@ -240,11 +238,180 @@ class LifeVaultController extends ChangeNotifier {
         .length;
   }
 
+  int get expiringSoonCount {
+    return dashboardDeadlineItems.where((item) {
+      final isExpiryKind = item.deadline.kind == DeadlineKind.expiry ||
+          item.document.category == DocumentCategory.insurance ||
+          item.document.documentType == DocumentType.insurancePolicy ||
+          item.document.documentType == DocumentType.warranty;
+      return isExpiryKind && item.isWithinNext30Days;
+    }).length;
+  }
+
+  List<DashboardDeadlineItem> get filteredReminderItems {
+    final all = dashboardDeadlineItems;
+    switch (_reminderFilter) {
+      case ReminderFilter.overdue:
+        return all.where((item) => item.isOverdue).toList();
+      case ReminderFilter.dueSoon:
+        return all.where((item) => item.isWithinNext30Days).toList();
+      case ReminderFilter.later:
+        return all.where((item) => item.daysRemaining > 30).toList();
+      case ReminderFilter.all:
+        return all;
+    }
+  }
+
+  List<HouseholdEntitySummary> get householdMembers {
+    return _customMembers.map((memberName) {
+      final lower = memberName.toLowerCase();
+      final matchingDocs = _allDocuments.where((doc) {
+        final asset = doc.assetName?.toLowerCase() ?? '';
+        final title = doc.title.toLowerCase();
+        return asset == lower ||
+            title.contains(lower) ||
+            (memberName == 'Primary Household' &&
+                (doc.assetName == null || doc.assetName!.isEmpty));
+      }).toList();
+      final docIds = matchingDocs.map((d) => d.id).toSet();
+      final deadlines = dashboardDeadlineItems
+          .where((item) => docIds.contains(item.document.id))
+          .toList();
+      return HouseholdEntitySummary(
+        name: memberName,
+        kind: 'member',
+        documentCount: matchingDocs.length,
+        upcomingDeadlineCount: deadlines.length,
+        nearestDeadlineIso:
+            deadlines.isNotEmpty ? deadlines.first.deadline.dateIso : null,
+      );
+    }).toList();
+  }
+
+  List<HouseholdEntitySummary> get householdAssets {
+    final assetNames = <String>{..._customAssets};
+    for (final doc in _allDocuments) {
+      final trimmed = doc.assetName?.trim() ?? '';
+      if (trimmed.isNotEmpty && !_customMembers.contains(trimmed)) {
+        assetNames.add(trimmed);
+      }
+    }
+    return assetNames.map((assetName) {
+      final lower = assetName.toLowerCase();
+      final matchingDocs = _allDocuments.where((doc) {
+        return (doc.assetName?.trim().toLowerCase() ?? '') == lower;
+      }).toList();
+      final docIds = matchingDocs.map((d) => d.id).toSet();
+      final deadlines = dashboardDeadlineItems
+          .where((item) => docIds.contains(item.document.id))
+          .toList();
+      return HouseholdEntitySummary(
+        name: assetName,
+        kind: 'asset',
+        documentCount: matchingDocs.length,
+        upcomingDeadlineCount: deadlines.length,
+        nearestDeadlineIso:
+            deadlines.isNotEmpty ? deadlines.first.deadline.dateIso : null,
+      );
+    }).toList();
+  }
+
   void setActiveTab(int index) {
     if (_activeTabIndex == index) {
       return;
     }
     _activeTabIndex = index;
+    notifyListeners();
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    if (_themeMode == mode) {
+      return;
+    }
+    _themeMode = mode;
+    notifyListeners();
+  }
+
+  void setVaultSortOrder(VaultSortOrder order) {
+    if (_vaultSortOrder == order) {
+      return;
+    }
+    _vaultSortOrder = order;
+    _sortFilteredDocumentsInPlace();
+    notifyListeners();
+  }
+
+  void toggleVaultGridView(bool isGrid) {
+    if (_isVaultGridView == isGrid) {
+      return;
+    }
+    _isVaultGridView = isGrid;
+    notifyListeners();
+  }
+
+  void setReminderFilter(ReminderFilter filter) {
+    if (_reminderFilter == filter) {
+      return;
+    }
+    _reminderFilter = filter;
+    notifyListeners();
+  }
+
+  void setDefaultReminderOffsets(List<int> offsets) {
+    if (offsets.isEmpty) {
+      return;
+    }
+    _defaultReminderOffsets = List<int>.unmodifiable(offsets);
+    _statusBannerMessage =
+        'Default reminder schedule updated to ${offsets.join(", ")} days before deadline.';
+    notifyListeners();
+  }
+
+  void toggleDeadlineCompleted(String deadlineId) {
+    if (_completedDeadlineIds.contains(deadlineId)) {
+      _completedDeadlineIds.remove(deadlineId);
+    } else {
+      _completedDeadlineIds.add(deadlineId);
+    }
+    notifyListeners();
+  }
+
+  void addHouseholdMember(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || _customMembers.contains(trimmed)) {
+      return;
+    }
+    _customMembers.add(trimmed);
+    _statusBannerMessage = 'Added household member "$trimmed".';
+    notifyListeners();
+  }
+
+  void addHouseholdAsset(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || _customAssets.contains(trimmed)) {
+      return;
+    }
+    _customAssets.add(trimmed);
+    _statusBannerMessage = 'Added household asset "$trimmed".';
+    notifyListeners();
+  }
+
+  Future<void> filterVaultByAsset(String? assetName) async {
+    _selectedAssetFilter = assetName;
+    await _applyVaultFilter();
+    _activeTabIndex = 2;
+    notifyListeners();
+  }
+
+  Future<void> checkLocalServices() async {
+    await refreshVault();
+    final storageLabel = isPersistentStorage
+        ? 'SQLite App-Private Storage Ready'
+        : 'Local Session Vault Ready';
+    _lastServiceCheckSummary =
+        '$storageLabel • Offline OCR Engine (eng.traineddata) Configured • '
+        '${_allDocuments.length} document(s), ${_verifiedDeadlines.length} verified deadline(s).';
+    _statusBannerMessage = _lastServiceCheckSummary;
     notifyListeners();
   }
 
@@ -295,10 +462,43 @@ class LifeVaultController extends ChangeNotifier {
 
   Future<void> _applyVaultFilter() async {
     final query = _vaultSearchQuery.trim();
-    _filteredDocuments = await vaultRepository.search(
+    var results = await vaultRepository.search(
       text: query.isEmpty ? null : query,
       category: _selectedCategoryFilter,
     );
+    if (_selectedAssetFilter != null &&
+        _selectedAssetFilter!.trim().isNotEmpty) {
+      final targetAsset = _selectedAssetFilter!.trim().toLowerCase();
+      results = results.where((doc) {
+        final docAsset = doc.assetName?.trim().toLowerCase() ?? '';
+        if (targetAsset == 'primary household') {
+          return docAsset.isEmpty || docAsset == targetAsset;
+        }
+        return docAsset == targetAsset ||
+            doc.title.toLowerCase().contains(targetAsset);
+      }).toList();
+    }
+    _filteredDocuments = List<DocumentRecord>.from(results);
+    _sortFilteredDocumentsInPlace();
+  }
+
+  void _sortFilteredDocumentsInPlace() {
+    switch (_vaultSortOrder) {
+      case VaultSortOrder.newest:
+        _filteredDocuments.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      case VaultSortOrder.oldest:
+        _filteredDocuments.sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+      case VaultSortOrder.approachingDeadline:
+        _filteredDocuments.sort((a, b) {
+          final aDeadlines = deadlinesForDocument(a.id);
+          final bDeadlines = deadlinesForDocument(b.id);
+          final aDate =
+              aDeadlines.isNotEmpty ? aDeadlines.first.dateIso : '9999-12-31';
+          final bDate =
+              bDeadlines.isNotEmpty ? bDeadlines.first.dateIso : '9999-12-31';
+          return aDate.compareTo(bDate);
+        });
+    }
   }
 
   Future<void> pickFromCamera() async {
@@ -440,14 +640,15 @@ class LifeVaultController extends ChangeNotifier {
     }
   }
 
-  PendingReviewDraft createManualEntryDraft() {
+  PendingReviewDraft createManualEntryDraft({String? initialAssetName}) {
     final picked = _selectedScanFile;
-    final stamp = _nowProvider().microsecondsSinceEpoch;
     return PendingReviewDraft(
-      imagePath: picked?.path ?? 'manual_entry_$stamp.png',
-      sha256: picked?.sha256 ?? 'manual_sha256_$stamp',
+      imagePath: picked?.path ?? 'manual_entry_local',
+      sha256:
+          picked?.sha256 ?? 'manual_${_nowProvider().millisecondsSinceEpoch}',
       ocrStatus: OcrStatus.manual,
       extractionResult: const ExtractionResult(),
+      initialAssetName: initialAssetName,
     );
   }
 
@@ -472,96 +673,38 @@ class LifeVaultController extends ChangeNotifier {
     VerifiedDocumentInput input, {
     String? existingDocumentId,
   }) async {
-    File? tempStagedFile;
-    String effectiveTempPath = input.originalTempPath;
-
-    try {
-      final originalFile = File(input.originalTempPath);
-      if (existingDocumentId != null) {
-        await reminderService.cancelForDocument(existingDocumentId);
-        if (originalFile.existsSync()) {
-          final stagedPath =
-              '${Directory.systemTemp.path}/lv_edit_$existingDocumentId.jpg';
-          tempStagedFile = await originalFile.copy(stagedPath);
-          effectiveTempPath = tempStagedFile.path;
-        }
-        await vaultRepository.deleteDocument(existingDocumentId);
-      }
-
-      if (vaultRepository is VaultRepositoryImpl &&
-          !File(effectiveTempPath).existsSync()) {
-        final stamp = _nowProvider().microsecondsSinceEpoch;
-        final fallbackPath =
-            '${Directory.systemTemp.path}/lv_manual_$stamp.png';
-        tempStagedFile = File(fallbackPath);
-        await tempStagedFile.writeAsBytes(_manualPlaceholderPng, flush: true);
-        effectiveTempPath = tempStagedFile.path;
-      }
-
-      String? effectiveSha256 = input.sha256;
-      if (vaultRepository is VaultRepositoryImpl &&
-          effectiveSha256 != null &&
-          existingDocumentId == null) {
-        final duplicate = await vaultRepository.findDocumentBySha256(
-          effectiveSha256,
-        );
-        if (duplicate != null) {
-          final stamp = _nowProvider().microsecondsSinceEpoch;
-          effectiveSha256 = '${effectiveSha256}_copy_$stamp';
-        }
-      }
-
-      final normalizedInput = VerifiedDocumentInput(
-        originalTempPath: effectiveTempPath,
-        title: input.title,
-        category: input.category,
-        documentType: input.documentType,
-        assetName: input.assetName,
-        tags: input.tags,
-        sha256: effectiveSha256,
-        ocrStatus: input.ocrStatus,
-        verificationStatus: input.verificationStatus,
-        verifiedDeadlines: input.verifiedDeadlines,
-        evidenceRecords: input.evidenceRecords,
-      );
-
-      final saved = await vaultRepository.saveVerified(normalizedInput);
-      await refreshVault();
-
-      final savedDeadlines = _verifiedDeadlines
-          .where((d) => d.documentId == saved.id && d.isVerified)
-          .toList();
-
-      if (savedDeadlines.isNotEmpty) {
-        final scheduleResult = await reminderService.schedule(
-          savedDeadlines.first,
-        );
-        if (!scheduleResult.permissionGranted) {
-          _statusBannerMessage = scheduleResult.statusMessage ??
-              'Saved to vault. Android notification permission is denied, so '
-                  'check the Home dashboard for deadline alerts.';
-        } else {
-          _statusBannerMessage = scheduleResult.statusMessage ??
-              'Document and verified deadline reminder saved locally.';
-        }
-      } else {
-        _statusBannerMessage = 'Document saved locally without a deadline.';
-      }
-
-      _selectedScanFile = null;
-      _duplicateExistingDoc = null;
-      _scanErrorMessage = null;
-      notifyListeners();
-      return saved;
-    } finally {
-      if (tempStagedFile != null && tempStagedFile.existsSync()) {
-        try {
-          tempStagedFile.deleteSync();
-        } on Object {
-          // Ignore temporary file cleanup errors.
-        }
-      }
+    if (existingDocumentId != null) {
+      await reminderService.cancelForDocument(existingDocumentId);
     }
+
+    final saved = await vaultRepository.saveVerified(input);
+    await refreshVault();
+
+    final savedDeadlines = _verifiedDeadlines
+        .where((d) => d.documentId == saved.id && d.isVerified)
+        .toList();
+
+    if (savedDeadlines.isNotEmpty) {
+      final scheduleResult = await reminderService.schedule(
+        savedDeadlines.first,
+      );
+      if (!scheduleResult.permissionGranted) {
+        _statusBannerMessage = scheduleResult.statusMessage ??
+            'Saved to vault. Android notification permission is denied, so '
+                'check the Home dashboard for deadline alerts.';
+      } else {
+        _statusBannerMessage = scheduleResult.statusMessage ??
+            'Document and verified deadline reminder saved locally.';
+      }
+    } else {
+      _statusBannerMessage = 'Document saved locally without a deadline.';
+    }
+
+    _selectedScanFile = null;
+    _duplicateExistingDoc = null;
+    _scanErrorMessage = null;
+    notifyListeners();
+    return saved;
   }
 
   Future<ReminderScheduleResult> scheduleReminderForDeadline(
@@ -597,6 +740,12 @@ class LifeVaultController extends ChangeNotifier {
       _isAnswering = false;
       notifyListeners();
     }
+  }
+
+  Future<void> askQuestionAndNavigate(String question) async {
+    _activeTabIndex = 3;
+    notifyListeners();
+    await askQuestion(question);
   }
 
   DocumentRecord? findLoadedDocumentById(String id) {
