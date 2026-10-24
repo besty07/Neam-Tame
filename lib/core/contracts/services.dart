@@ -69,3 +69,12 @@ abstract interface class ReminderService {
 
   Future<void> cancelForDocument(String documentId);
 }
+
+/// On-device Action Guide generator (Qwen-0.6B primary + deterministic fallback).
+abstract interface class ActionGuideService {
+  Future<ActionPlaybook> generatePlaybook({
+    required DocumentRecord document,
+    DeadlineRecord? deadline,
+    String? evidenceSnippet,
+  });
+}

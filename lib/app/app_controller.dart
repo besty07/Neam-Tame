@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../core/contracts/contracts.dart';
+import '../features/action_guide/action_guide.dart';
+import '../features/vault/vault.dart';
 import 'default_services.dart';
 
 /// Sort options for the Document Library (`VaultScreen`).
@@ -83,7 +87,7 @@ class DashboardDeadlineItem {
   bool get isWithinNext30Days => daysRemaining >= 0 && daysRemaining <= 30;
 }
 
-/// Lightweight `ChangeNotifier` state management for LifeVault v0.1 (D4.3).
+/// Lightweight `ChangeNotifier` state management for LifeVault v0.1 / v0.2.
 class LifeVaultController extends ChangeNotifier {
   LifeVaultController({
     required this.ocrService,
@@ -92,10 +96,15 @@ class LifeVaultController extends ChangeNotifier {
     required this.questionService,
     required this.reminderService,
     required this.captureDelegate,
+    ActionGuideService? actionGuideService,
     DateTime Function()? nowProvider,
     this.isPersistentStorage = false,
-  }) {
+  }) : actionGuideService = actionGuideService ?? HybridActionGuideService() {
     _nowProvider = nowProvider ?? DateTime.now;
+    if (reminderService is ReminderServiceImpl) {
+      (reminderService as ReminderServiceImpl)
+          .setNotificationTapHandler(handleNotificationPayload);
+    }
   }
 
   static const int maxImageBytes = 12 * 1024 * 1024;
@@ -106,6 +115,7 @@ class LifeVaultController extends ChangeNotifier {
   final QuestionService questionService;
   final ReminderService reminderService;
   final ImageCaptureDelegate captureDelegate;
+  final ActionGuideService actionGuideService;
   final bool isPersistentStorage;
   late final DateTime Function() _nowProvider;
 
@@ -117,6 +127,11 @@ class LifeVaultController extends ChangeNotifier {
   List<DocumentRecord> _allDocuments = <DocumentRecord>[];
   List<DocumentRecord> _filteredDocuments = <DocumentRecord>[];
   List<DeadlineRecord> _verifiedDeadlines = <DeadlineRecord>[];
+
+  final Map<String, ActionPlaybook> _playbooksByDocId =
+      <String, ActionPlaybook>{};
+  final Set<String> _loadingPlaybookDocIds = <String>{};
+  String? _pendingPlaybookDeepLinkDocId;
 
   String _vaultSearchQuery = '';
   DocumentCategory? _selectedCategoryFilter;
@@ -172,6 +187,8 @@ class LifeVaultController extends ChangeNotifier {
   String get lastQuestion => _lastQuestion;
   AnswerResult? get lastAnswerResult => _lastAnswerResult;
   bool get isAnswering => _isAnswering;
+
+  String? get pendingPlaybookDeepLinkDocId => _pendingPlaybookDeepLinkDocId;
 
   DateTime get todayDateOnly {
     final now = _nowProvider();
@@ -420,6 +437,99 @@ class LifeVaultController extends ChangeNotifier {
       return;
     }
     _statusBannerMessage = null;
+    notifyListeners();
+  }
+
+  /// Handles notification tap payloads formatted as
+  /// `{"documentId": "<id>", "action": "open_playbook"}` (Phase 4).
+  void handleNotificationPayload(String? rawPayload) {
+    if (rawPayload == null || rawPayload.trim().isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(rawPayload);
+      if (decoded is Map<String, dynamic>) {
+        final action = decoded['action'] as String?;
+        final docId = decoded['documentId'] as String?;
+        if (docId != null &&
+            docId.isNotEmpty &&
+            (action == null || action == 'open_playbook')) {
+          _pendingPlaybookDeepLinkDocId = docId;
+          notifyListeners();
+        }
+      }
+    } on Object {
+      // Ignore malformed payloads.
+    }
+  }
+
+  /// Consumes and clears the pending notification deep-link target document ID.
+  String? consumePendingPlaybookDeepLink() {
+    final target = _pendingPlaybookDeepLinkDocId;
+    _pendingPlaybookDeepLinkDocId = null;
+    return target;
+  }
+
+  /// Returns the cached [ActionPlaybook] for [documentId], if already loaded.
+  ActionPlaybook? playbookForDocument(String documentId) {
+    return _playbooksByDocId[documentId];
+  }
+
+  /// True while an [ActionPlaybook] is being generated for [documentId].
+  bool isLoadingPlaybook(String documentId) {
+    return _loadingPlaybookDocIds.contains(documentId);
+  }
+
+  /// Generates and caches an [ActionPlaybook] for [documentId] if not yet loaded.
+  Future<ActionPlaybook?> ensurePlaybookLoaded(
+    String documentId, {
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _playbooksByDocId.containsKey(documentId)) {
+      return _playbooksByDocId[documentId];
+    }
+    if (_loadingPlaybookDocIds.contains(documentId)) {
+      return _playbooksByDocId[documentId];
+    }
+
+    final doc = findLoadedDocumentById(documentId);
+    if (doc == null) {
+      return null;
+    }
+
+    _loadingPlaybookDocIds.add(documentId);
+    notifyListeners();
+
+    try {
+      final docDeadlines = deadlinesForDocument(documentId);
+      final primaryDeadline =
+          docDeadlines.isNotEmpty ? docDeadlines.first : null;
+      final playbook = await actionGuideService.generatePlaybook(
+        document: doc,
+        deadline: primaryDeadline,
+        evidenceSnippet: primaryDeadline?.evidenceSnippet,
+      );
+      _playbooksByDocId[documentId] = playbook;
+      return playbook;
+    } finally {
+      _loadingPlaybookDocIds.remove(documentId);
+      notifyListeners();
+    }
+  }
+
+  /// Toggles the `isCompleted` state of [stepId] in [documentId]'s playbook.
+  void togglePlaybookStep(String documentId, String stepId) {
+    final existing = _playbooksByDocId[documentId];
+    if (existing == null) {
+      return;
+    }
+    final updatedSteps = existing.steps.map((step) {
+      if (step.id == stepId) {
+        return step.copyWith(isCompleted: !step.isCompleted);
+      }
+      return step;
+    }).toList();
+    _playbooksByDocId[documentId] = existing.copyWith(steps: updatedSteps);
     notifyListeners();
   }
 
@@ -674,11 +784,13 @@ class LifeVaultController extends ChangeNotifier {
     String? existingDocumentId,
   }) async {
     if (existingDocumentId != null) {
+      _playbooksByDocId.remove(existingDocumentId);
       await reminderService.cancelForDocument(existingDocumentId);
     }
 
     final saved = await vaultRepository.saveVerified(input);
     await refreshVault();
+    await ensurePlaybookLoaded(saved.id, forceRefresh: true);
 
     final savedDeadlines = _verifiedDeadlines
         .where((d) => d.documentId == saved.id && d.isVerified)
@@ -724,6 +836,7 @@ class LifeVaultController extends ChangeNotifier {
   }
 
   Future<void> deleteDocument(String documentId) async {
+    _playbooksByDocId.remove(documentId);
     await reminderService.cancelForDocument(documentId);
     await vaultRepository.deleteDocument(documentId);
     _statusBannerMessage = 'Document and associated reminders removed.';

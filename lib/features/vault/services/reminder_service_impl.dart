@@ -1,5 +1,5 @@
 // lib/features/vault/services/reminder_service_impl.dart
-// Owner: Developer 3 — Task D3.5
+// Owner: Developer 3 — Task D3.5 (Enhanced with Qwen Phase 4 Deep-Link Payload)
 //
 // Schedules Android local notifications for verified deadlines.
 // Rules:
@@ -7,12 +7,13 @@
 //   - Uses inexact alarms (AndroidScheduleMode.inexactAllowWhileIdle) to
 //     avoid the SCHEDULE_EXACT_ALARM permission requirement.
 //   - Notification content is generic; no policy numbers or personal details.
+//   - Encodes payload `{ "documentId": docId, "action": "open_playbook" }`
+//     for direct Action Playbook deep-linking upon notification tap.
 //   - Returns ReminderScheduleResult with scheduled + permissionGranted booleans.
 //   - Persists notification IDs back to DB for cancellation/rescheduling.
 //   - Skips offsets whose trigger time is already in the past.
-//
-// D3.7: manifest additions required from Dev 4 are listed in
-//       docs/d3_integration_request.md
+
+import 'dart:convert';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -24,6 +25,7 @@ import '../data/repositories/vault_repository_impl.dart';
 class ReminderServiceImpl implements ReminderService {
   final FlutterLocalNotificationsPlugin _plugin;
   final VaultRepositoryImpl _repo;
+  void Function(String? payload)? _onNotificationTap;
 
   bool _initialized = false;
   bool _permissionGranted = false;
@@ -32,21 +34,58 @@ class ReminderServiceImpl implements ReminderService {
   ReminderServiceImpl({
     FlutterLocalNotificationsPlugin? plugin,
     required VaultRepositoryImpl repo,
+    void Function(String? payload)? onNotificationTap,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
-        _repo = repo;
+        _repo = repo,
+        _onNotificationTap = onNotificationTap;
+
+  /// Encodes the notification payload for deep-linking into the document's
+  /// Action Playbook (`QWEN_INTEGRATION_PLAN.md` Phase 4.1).
+  static String encodePlaybookPayload(String documentId) {
+    return jsonEncode(<String, String>{
+      'documentId': documentId,
+      'action': 'open_playbook',
+    });
+  }
+
+  /// Registers or updates the notification tap handler.
+  void setNotificationTapHandler(void Function(String? payload)? handler) {
+    _onNotificationTap = handler;
+  }
 
   // ─── Initialization ──────────────────────────────────────────────────────────
 
   /// Must be called once during app startup (before scheduling anything).
   /// Returns true if permission was granted (Android 13+); false otherwise.
-  Future<bool> initialize() async {
+  Future<bool> initialize({
+    void Function(String? payload)? onNotificationTap,
+  }) async {
+    if (onNotificationTap != null) {
+      _onNotificationTap = onNotificationTap;
+    }
     if (_initialized) return _permissionGranted;
 
     tz_data.initializeTimeZones();
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const settings = InitializationSettings(android: androidInit);
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        _onNotificationTap?.call(response.payload);
+      },
+    );
+
+    try {
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails != null &&
+          launchDetails.didNotificationLaunchApp &&
+          launchDetails.notificationResponse?.payload != null) {
+        _onNotificationTap?.call(launchDetails.notificationResponse?.payload);
+      }
+    } catch (_) {
+      // Ignore if unsupported in test stub environment.
+    }
 
     _initialized = true;
 
@@ -65,14 +104,6 @@ class ReminderServiceImpl implements ReminderService {
   // ─── ReminderService interface ───────────────────────────────────────────────
 
   /// D3.5 — Schedule inexact local notifications for [deadline].
-  ///
-  /// For each offset in [deadline.reminderOffsetsDays]:
-  ///   - Compute trigger time = dueDate - offset days (at 09:00 local time).
-  ///   - Skip if trigger is already in the past.
-  ///   - Schedule with AndroidScheduleMode.inexactAllowWhileIdle.
-  ///
-  /// Returns [ReminderScheduleResult.scheduled] = true if at least one
-  /// notification was successfully scheduled.
   @override
   Future<ReminderScheduleResult> schedule(DeadlineRecord deadline) async {
     if (!deadline.isVerified) {
@@ -98,6 +129,7 @@ class ReminderServiceImpl implements ReminderService {
     final due = DateTime.parse(deadline.dateIso);
     final now = DateTime.now();
     final scheduledIds = <int>[];
+    final payload = encodePlaybookPayload(deadline.documentId);
 
     for (final offsetDays in deadline.reminderOffsetsDays) {
       // Trigger at 09:00 local time, [offsetDays] before due date
@@ -135,11 +167,11 @@ class ReminderServiceImpl implements ReminderService {
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.wallClockTime,
+          payload: payload,
         );
         scheduledIds.add(notifId);
       } catch (_) {
         // If one notification fails, continue with remaining offsets.
-        // The caller can detect partial scheduling via notificationIds count.
       }
     }
 
@@ -159,7 +191,6 @@ class ReminderServiceImpl implements ReminderService {
   }
 
   /// D3.5 — Cancel all notifications associated with [documentId].
-  /// Retrieves notification IDs from DB and cancels them individually.
   @override
   Future<void> cancelForDocument(String documentId) async {
     if (!_initialized) await initialize();
@@ -170,7 +201,6 @@ class ReminderServiceImpl implements ReminderService {
         await _plugin.cancel(id);
       }
     }
-    // The DB cascade on deleteDocument clears the deadline rows automatically.
   }
 
   /// Cancel notifications for a single deadline (use after deadline edit).
@@ -184,7 +214,6 @@ class ReminderServiceImpl implements ReminderService {
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   /// Generates a stable int notification ID from deadline UUID + offset.
-  /// IDs must fit in a signed 32-bit int for flutter_local_notifications.
   int _stableNotificationId(String deadlineId, int offsetDays) {
     final base = deadlineId.replaceAll('-', '');
     final hash = base.hashCode.abs() % 100000;

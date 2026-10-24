@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/contracts/contracts.dart';
+import '../features/action_guide/action_guide.dart';
 import '../features/capture_ocr/capture_ocr.dart';
 import '../features/classification/classification.dart';
 import '../features/screens/app_shell_screen.dart';
@@ -13,7 +14,7 @@ import 'theme.dart';
 ///
 /// Wires Developer 1 (Offline OCR & Capture), Developer 2 (Classification &
 /// Date Extraction), Developer 3 (SQLite Vault, Grounded Q&A & Reminders),
-/// and Developer 4 (App Controller & Screens).
+/// Developer 4 (App Controller & Screens), and Qwen v0.2 Action Guide.
 class LifeVaultDependencies {
   const LifeVaultDependencies({
     required this.ocrService,
@@ -21,6 +22,7 @@ class LifeVaultDependencies {
     required this.vaultRepository,
     required this.questionService,
     required this.reminderService,
+    this.actionGuideService,
     this.captureDelegate,
     this.nowProvider,
     this.isPersistentStorage = false,
@@ -31,6 +33,7 @@ class LifeVaultDependencies {
   final VaultRepository vaultRepository;
   final QuestionService questionService;
   final ReminderService reminderService;
+  final ActionGuideService? actionGuideService;
   final ImageCaptureDelegate? captureDelegate;
   final DateTime Function()? nowProvider;
   final bool isPersistentStorage;
@@ -46,14 +49,15 @@ class LifeVaultDependencies {
       vaultRepository: repository,
       questionService: GroundedVaultQuestionService(repository),
       reminderService: const NoOpReminderService(),
+      actionGuideService: HybridActionGuideService(),
       captureDelegate: CaptureServiceImageDelegate(),
       isPersistentStorage: false,
     );
   }
 
   /// Production asynchronous composition connecting D1 native Tesseract OCR,
-  /// D2 keyword/date extraction, and D3 SQLite + app-private file storage +
-  /// Android local notification scheduling.
+  /// D2 keyword/date extraction, D3 SQLite + app-private file storage +
+  /// Android local notification scheduling, and Hybrid Qwen Action Guide.
   static Future<LifeVaultDependencies> createProduction() async {
     try {
       final sqliteRepo = await VaultRepositoryImpl.create();
@@ -67,6 +71,7 @@ class LifeVaultDependencies {
         vaultRepository: adapterRepo,
         questionService: GroundedVaultQuestionService(adapterRepo),
         reminderService: reminderService,
+        actionGuideService: HybridActionGuideService(),
         captureDelegate: CaptureServiceImageDelegate(),
         isPersistentStorage: true,
       );
@@ -77,7 +82,7 @@ class LifeVaultDependencies {
   }
 }
 
-/// Root application widget for LifeVault v0.1.
+/// Root application widget for LifeVault v0.1 / v0.2.
 class LifeVaultApp extends StatefulWidget {
   const LifeVaultApp({
     super.key,
@@ -110,6 +115,7 @@ class _LifeVaultAppState extends State<LifeVaultApp> {
         vaultRepository: deps.vaultRepository,
         questionService: deps.questionService,
         reminderService: deps.reminderService,
+        actionGuideService: deps.actionGuideService,
         captureDelegate: deps.captureDelegate ?? CaptureServiceImageDelegate(),
         nowProvider: deps.nowProvider,
         isPersistentStorage: deps.isPersistentStorage,

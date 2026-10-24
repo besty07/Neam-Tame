@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_controller.dart';
 import '../../app/theme.dart';
 import 'ask_screen.dart';
+import 'document_detail_screen.dart';
 import 'family_assets_screen.dart';
 import 'home_screen.dart';
 import 'reminders_screen.dart';
@@ -67,6 +68,24 @@ class AppShellScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
+        final pendingDeepLinkDocId = controller.pendingPlaybookDeepLinkDocId;
+        if (pendingDeepLinkDocId != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final targetDocId = controller.consumePendingPlaybookDeepLink();
+            if (targetDocId != null && context.mounted) {
+              Navigator.of(context).push<bool>(
+                MaterialPageRoute<bool>(
+                  builder: (routeContext) => DocumentDetailScreen(
+                    controller: controller,
+                    documentId: targetDocId,
+                    highlightPlaybook: true,
+                  ),
+                ),
+              );
+            }
+          });
+        }
+
         final tabIndex = controller.activeTabIndex;
         final bannerMessage = controller.statusBannerMessage;
         final bodyContent = _buildBodyForIndex(tabIndex);

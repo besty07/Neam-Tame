@@ -411,3 +411,65 @@ class ReminderScheduleResult {
   final String? statusMessage;
   final String? errorCode;
 }
+
+/// A discrete actionable task for the user before a deadline.
+class ActionStep {
+  const ActionStep({
+    required this.id,
+    required this.title,
+    required this.description,
+    this.copyableText,
+    this.isCompleted = false,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String? copyableText;
+  final bool isCompleted;
+
+  ActionStep copyWith({
+    String? id,
+    String? title,
+    String? description,
+    String? copyableText,
+    bool? isCompleted,
+  }) {
+    return ActionStep(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      copyableText: copyableText ?? this.copyableText,
+      isCompleted: isCompleted ?? this.isCompleted,
+    );
+  }
+}
+
+/// Complete actionable playbook for a verified document.
+class ActionPlaybook {
+  const ActionPlaybook({
+    required this.documentId,
+    required this.summary,
+    required this.steps,
+    required this.source,
+  });
+
+  final String documentId;
+  final String summary;
+  final List<ActionStep> steps;
+  final PlaybookSource source; // qwen | deterministicFallback
+
+  ActionPlaybook copyWith({
+    String? documentId,
+    String? summary,
+    List<ActionStep>? steps,
+    PlaybookSource? source,
+  }) {
+    return ActionPlaybook(
+      documentId: documentId ?? this.documentId,
+      summary: summary ?? this.summary,
+      steps: steps ?? this.steps,
+      source: source ?? this.source,
+    );
+  }
+}
