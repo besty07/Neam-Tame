@@ -43,6 +43,7 @@ class LifeVaultOcrChannel(
         private const val MAX_IMAGE_DIMENSION = 2400
         private const val ASSET_MODEL_PATH = "flutter_assets/assets/tessdata/eng.traineddata"
         private const val EXPECTED_MODEL_SIZE = 4113088L
+        private const val EXPECTED_ENG_HASH = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
 
         /**
          * Convenience registration method for Developer 4 to wire into `MainActivity.kt`:
@@ -217,8 +218,6 @@ class LifeVaultOcrChannel(
             }
         }
     }
-
-    private const val EXPECTED_ENG_HASH = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
 
     /**
      * Copies the bundled model asset into `<filesDir>/tessdata/<language>.traineddata`
