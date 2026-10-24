@@ -1,0 +1,122 @@
+LifeVault (Neam-Tame)
+Copyright 2026 LifeVault Contributors
+
+This product includes software developed by the LifeVault Contributors
+(https://github.com/besty07/Neam-Tame) and incorporates or integrates with
+the following third-party open-source software, runtimes, and open-weight
+machine learning / OCR models.
+
+================================================================================
+1. GOOGLE GEMMA OPEN-WEIGHT MODELS NOTICE
+================================================================================
+Gemma is provided under and subject to the Gemma Terms of Use found at
+ai.google.dev/gemma/terms
+
+LifeVault includes optional on-device integration bridges (`LifeVaultGemmaChannel`
+and `LifeVaultLlmChannel`) for Google Gemma open-weight models, including:
+  - Gemma 3n E4B IT / Gemma 3n E2B IT (`.litertlm` / `.task` format)
+  - Gemma 2 2B IT (`gemma-2b-it` / `gemma-2-2b-it` `.gguf` format)
+
+Gemma model weights are governed by the Google Gemma Terms of Use
+(https://ai.google.dev/gemma/terms) and the Gemma Prohibited Use Policy
+(https://ai.google.dev/gemma/prohibited_use_policy), NOT the Apache License 2.0.
+Raw Gemma model weight binaries are not committed to this Git repository or
+bundled in the base APK; users provision legitimately obtained model artifacts
+locally on-device.
+
+================================================================================
+2. TESSERACT OCR & TESSDATA_FAST (`eng.traineddata`)
+================================================================================
+- Tesseract OCR Engine (v5.3.x) & `tessdata_fast` (`assets/tessdata/eng.traineddata`)
+  Copyright 2006-2024 Google Inc. and Tesseract OCR Contributors.
+  Licensed under the Apache License, Version 2.0.
+  Source: https://github.com/tesseract-ocr/tesseract
+  Model Source: https://github.com/tesseract-ocr/tessdata_fast
+
+- Tesseract4Android (`cz.adaptech.tesseract4android:tesseract4android:4.7.0`)
+  Copyright 2019-2024 Robert Pösel / Adaptech s.r.o.
+  Licensed under the Apache License, Version 2.0.
+  Source: https://github.com/adaptech-cz/Tesseract4Android
+
+- Leptonica Image Processing Library (v1.83+)
+  Copyright (C) 2001-2024 Leptonica (Dan Bloomberg). All rights reserved.
+  Licensed under the BSD 2-Clause (Leptonica) License.
+  Source: http://www.leptonica.org/ / https://github.com/DanBloomberg/leptonica
+
+================================================================================
+3. QWEN OPEN-WEIGHT LANGUAGE MODELS (`Qwen2.5-0.5B-Instruct` / `Qwen3-0.6B`)
+================================================================================
+- Qwen2.5-0.5B-Instruct & Qwen3-0.6B (GGUF quantized weights)
+  Copyright 2024-2025 Alibaba Cloud / Qwen Team.
+  Licensed under the Apache License, Version 2.0.
+  Source: https://github.com/QwenLM/Qwen2.5
+  Hugging Face: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+
+================================================================================
+4. GOOGLE ML KIT ON-DEVICE TEXT RECOGNITION & FLUTTER-ML PLUGINS
+================================================================================
+- `google_mlkit_text_recognition` (v0.17.1) & `google_mlkit_commons` (v0.13.0)
+  Copyright (c) 2021 flutter-ml Contributors.
+  Licensed under the MIT License.
+  Source: https://github.com/flutter-ml/google_ml_kit_flutter
+
+- Google ML Kit Text Recognition Android SDK (`com.google.mlkit:text-recognition`)
+  Copyright Google LLC.
+  Governed by the Google APIs Terms of Service and ML Kit Terms of Service
+  (https://developers.google.com/ml-kit/terms). Used strictly in 100% offline,
+  on-device mode with `android.permission.INTERNET` removed from the release APK.
+
+================================================================================
+5. ON-DEVICE INFERENCE RUNTIMES (`LiteRT-LM` / `MediaPipe` & `llama.cpp`)
+================================================================================
+- Google AI Edge LiteRT-LM & MediaPipe Tasks GenAI
+  Copyright Google LLC.
+  Licensed under the Apache License, Version 2.0.
+  Source: https://github.com/google-ai-edge/litert-lm
+          https://github.com/google-ai-edge/mediapipe
+
+- llama.cpp / GGML (GGUF file format & inference runtime specification)
+  Copyright (c) 2023-2024 Georgi Gerganov and the ggml authors.
+  Licensed under the MIT License.
+  Source: https://github.com/ggml-org/llama.cpp
+
+================================================================================
+6. FLUTTER, DART, ANDROIDX, KOTLIN & SQLITE OPEN-SOURCE COMPONENTS
+================================================================================
+- Flutter SDK & Dart SDK (`flutter`, `crypto`, `intl`, `path`, `image_picker`,
+  `path_provider`, `flutter_lints`, `flutter_test`)
+  Copyright 2014 The Flutter Authors / The Dart Project Authors.
+  Licensed under the BSD 3-Clause License.
+  Source: https://github.com/flutter/flutter
+
+- `sqflite`, `sqflite_common`, `sqflite_common_ffi`, `synchronized`
+  Copyright (c) 2017-2024 Alexandre Roux Tekartik.
+  Licensed under the BSD 2-Clause License.
+  Source: https://github.com/tekartik/sqflite
+
+- SQLite Database Engine
+  Dedicated to the Public Domain by D. Richard Hipp and Hwaci.
+  Source: https://www.sqlite.org/copyright.html
+
+- `flutter_local_notifications`
+  Copyright (c) 2018 Michael Bui.
+  Licensed under the BSD 3-Clause License.
+  Source: https://github.com/MaikuB/flutter_local_notifications
+
+- `timezone` (with IANA Time Zone Database)
+  Copyright (c) 2014-2024 Dana Hanna and Contributors.
+  Licensed under the BSD 2-Clause License (IANA TZ Data is Public Domain).
+  Source: https://github.com/srawlins/timezone
+
+- `uuid`
+  Copyright (c) 2012-2024 Yulian Kuncheff.
+  Licensed under the MIT License.
+  Source: https://github.com/Daegalus/dart-uuid
+
+- Kotlin Standard Library & `kotlinx-coroutines-android`
+  Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language Contributors.
+  Licensed under the Apache License, Version 2.0.
+  Source: https://github.com/Kotlin/kotlinx.coroutines
+
+For complete dependency tables, SHA-256 model checksums, and full license texts,
+see `docs/LICENSES.md` and `docs/MODEL_MANIFEST.md`.
