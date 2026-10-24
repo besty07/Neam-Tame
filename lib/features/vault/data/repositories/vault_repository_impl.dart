@@ -382,8 +382,9 @@ class VaultRepositoryImpl implements VaultRepository {
   List<int> _decodeIntList(String raw) {
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is List)
+      if (decoded is List) {
         return decoded.map((e) => (e as num).toInt()).toList();
+      }
     } catch (_) {}
     return [];
   }
