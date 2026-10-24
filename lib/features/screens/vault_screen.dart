@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/theme.dart';
 import '../../core/contracts/contracts.dart';
 import 'document_detail_screen.dart';
 import 'review_screen.dart';
 
 /// Vault screen providing local document search, 10-category filtering,
-/// detail inspection, recategorization, and deletion (Section 4).
+/// asset/member filtering, sorting, grid/list layouts, detail inspection,
+/// recategorization, and deletion with confirmation (P0 spec).
 class VaultScreen extends StatefulWidget {
   const VaultScreen({
     super.key,
@@ -95,32 +97,74 @@ class _VaultScreenState extends State<VaultScreen> {
   @override
   Widget build(BuildContext context) {
     final selectedCategory = widget.controller.selectedCategoryFilter;
+    final selectedAsset = widget.controller.selectedAssetFilter;
     final documents = widget.controller.filteredDocuments;
+    final isGrid = widget.controller.isVaultGridView;
+    final sortOrder = widget.controller.vaultSortOrder;
 
     return Column(
       children: <Widget>[
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: TextField(
-            key: const Key('vault_search_field'),
-            controller: _searchController,
-            onChanged: widget.controller.setVaultSearchQuery,
-            decoration: InputDecoration(
-              hintText: 'Search by title, category, type, or asset...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        widget.controller.setVaultSearchQuery('');
-                      },
-                    ),
-              border: const OutlineInputBorder(),
-            ),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  key: const Key('vault_search_field'),
+                  controller: _searchController,
+                  onChanged: widget.controller.setVaultSearchQuery,
+                  decoration: InputDecoration(
+                    hintText: 'Search by title, category, type, or asset...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              widget.controller.setVaultSearchQuery('');
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<VaultSortOrder>(
+                key: const Key('vault_sort_menu'),
+                tooltip: 'Sort documents',
+                initialValue: sortOrder,
+                onSelected: widget.controller.setVaultSortOrder,
+                icon: const Icon(Icons.sort),
+                itemBuilder: (context) => VaultSortOrder.values.map((order) {
+                  return PopupMenuItem<VaultSortOrder>(
+                    value: order,
+                    child: Text(order.label),
+                  );
+                }).toList(),
+              ),
+              IconButton(
+                key: const Key('vault_view_toggle_button'),
+                tooltip: isGrid ? 'Switch to list view' : 'Switch to grid view',
+                onPressed: () => widget.controller.toggleVaultGridView(!isGrid),
+                icon: Icon(
+                  isGrid ? Icons.view_list_outlined : Icons.grid_view_outlined,
+                ),
+              ),
+            ],
           ),
         ),
+        if (selectedAsset != null && selectedAsset.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: <Widget>[
+                InputChip(
+                  label: Text('Asset / Member: $selectedAsset'),
+                  onDeleted: () => widget.controller.filterVaultByAsset(null),
+                ),
+              ],
+            ),
+          ),
         SizedBox(
           height: 48,
           child: ListView(
@@ -157,26 +201,62 @@ class _VaultScreenState extends State<VaultScreen> {
         const Divider(height: 16),
         Expanded(
           child: documents.isEmpty
-              ? const Center(
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'No matching documents in your local vault.',
-                      textAlign: TextAlign.center,
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(
+                          Icons.folder_off_outlined,
+                          size: 44,
+                          color: LifeVaultColors.textMuted,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'No matching documents in your local vault.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () => widget.controller.setActiveTab(1),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add Document'),
+                        ),
+                      ],
                     ),
                   ),
                 )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  itemCount: documents.length,
-                  itemBuilder: (context, index) {
-                    final doc = documents[index];
-                    return _buildDocumentCard(context, doc);
-                  },
-                ),
+              : isGrid
+                  ? GridView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 340,
+                        mainAxisExtent: 170,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      itemCount: documents.length,
+                      itemBuilder: (context, index) {
+                        final doc = documents[index];
+                        return _buildDocumentCard(context, doc);
+                      },
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      itemCount: documents.length,
+                      itemBuilder: (context, index) {
+                        final doc = documents[index];
+                        return _buildDocumentCard(context, doc);
+                      },
+                    ),
         ),
       ],
     );
@@ -200,7 +280,18 @@ class _VaultScreenState extends State<VaultScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: () => _openDetail(context, doc),
-        leading: const Icon(Icons.description_outlined),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: LifeVaultColors.primaryLight,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.description_outlined,
+            color: LifeVaultColors.primary,
+          ),
+        ),
         title: Text(
           doc.title,
           style: const TextStyle(fontWeight: FontWeight.w600),
@@ -215,7 +306,9 @@ class _VaultScreenState extends State<VaultScreen> {
             Text(
               '$deadlineSubtitle • '
               'Status: ${doc.verificationStatus.wireName}',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LifeVaultColors.textSecondary,
+                  ),
             ),
           ],
         ),

@@ -1,14 +1,17 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../app/theme.dart';
 import '../../core/contracts/contracts.dart';
 import 'review_screen.dart';
 
 /// Document detail view displaying original image, metadata, verified
-/// deadlines, edit/recategorize action, and delete confirmation (Section 4).
-class DocumentDetailScreen extends StatelessWidget {
+/// deadlines, masked SHA-256 provenance, edit/recategorize action, and delete
+/// confirmation (P0 spec).
+class DocumentDetailScreen extends StatefulWidget {
   const DocumentDetailScreen({
     super.key,
     required this.controller,
@@ -18,12 +21,19 @@ class DocumentDetailScreen extends StatelessWidget {
   final LifeVaultController controller;
   final String documentId;
 
+  @override
+  State<DocumentDetailScreen> createState() => _DocumentDetailScreenState();
+}
+
+class _DocumentDetailScreenState extends State<DocumentDetailScreen> {
+  bool _revealFullHash = false;
+
   Future<void> _openEdit(BuildContext context, DocumentRecord document) async {
-    final draft = controller.createEditDraft(document);
+    final draft = widget.controller.createEditDraft(document);
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (context) => ReviewScreen(
-          controller: controller,
+          controller: widget.controller,
           draft: draft,
         ),
       ),
@@ -66,7 +76,7 @@ class DocumentDetailScreen extends StatelessWidget {
       return;
     }
 
-    await controller.deleteDocument(document.id);
+    await widget.controller.deleteDocument(document.id);
     if (context.mounted) {
       Navigator.of(context).pop(true);
     }
@@ -75,9 +85,11 @@ class DocumentDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: controller,
+      listenable: widget.controller,
       builder: (context, _) {
-        final document = controller.findLoadedDocumentById(documentId);
+        final document = widget.controller.findLoadedDocumentById(
+          widget.documentId,
+        );
         if (document == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Document Detail')),
@@ -87,11 +99,11 @@ class DocumentDetailScreen extends StatelessWidget {
           );
         }
 
-        final deadlines = controller.deadlinesForDocument(document.id);
+        final deadlines = widget.controller.deadlinesForDocument(document.id);
         final imageFile = File(document.originalPath);
-        final hasLocalFile = imageFile.existsSync();
+        final hasLocalFile = !kIsWeb && imageFile.existsSync();
         final shortHash = document.sha256.length > 12
-            ? document.sha256.substring(0, 12)
+            ? '${document.sha256.substring(0, 8)}••••'
             : document.sha256;
 
         return Scaffold(
@@ -119,7 +131,7 @@ class DocumentDetailScreen extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: Container(
                   height: 240,
-                  color: Colors.grey.shade100,
+                  color: LifeVaultColors.surfaceSecondary,
                   child: hasLocalFile
                       ? InteractiveViewer(
                           minScale: 1,
@@ -133,11 +145,11 @@ class DocumentDetailScreen extends StatelessWidget {
                               const Icon(
                                 Icons.insert_drive_file_outlined,
                                 size: 48,
-                                color: Colors.blueGrey,
+                                color: LifeVaultColors.primary,
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Local Path: ${document.originalPath}',
+                                'Local Vault Copy (${document.ocrStatus.wireName})',
                                 style: Theme.of(context).textTheme.bodySmall,
                                 textAlign: TextAlign.center,
                               ),
@@ -154,8 +166,11 @@ class DocumentDetailScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'Metadata & Provenance',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        'Document Overview & Provenance',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow('Title', document.title),
@@ -172,7 +187,31 @@ class DocumentDetailScreen extends StatelessWidget {
                         document.verificationStatus.wireName,
                       ),
                       _buildInfoRow('OCR Status', document.ocrStatus.wireName),
-                      _buildInfoRow('SHA-256 Prefix', shortHash),
+                      Row(
+                        children: <Widget>[
+                          const SizedBox(
+                            width: 140,
+                            child: Text(
+                              'SHA-256 Digest',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              _revealFullHash ? document.sha256 : shortHash,
+                            ),
+                          ),
+                          TextButton(
+                            key: const Key('detail_toggle_hash_mask'),
+                            onPressed: () {
+                              setState(() {
+                                _revealFullHash = !_revealFullHash;
+                              });
+                            },
+                            child: Text(_revealFullHash ? 'Mask' : 'Reveal'),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -184,9 +223,25 @@ class DocumentDetailScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text(
-                        'Verified Deadlines',
-                        style: Theme.of(context).textTheme.titleMedium,
+                      Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              'Important Dates & Reminders',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _openEdit(context, document),
+                            icon: const Icon(Icons.edit_calendar_outlined),
+                            label: Text(
+                              deadlines.isEmpty ? 'Add Date' : 'Edit Date',
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       if (deadlines.isEmpty)
@@ -203,15 +258,21 @@ class DocumentDetailScreen extends StatelessWidget {
                           }
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.event_available_outlined),
+                            leading: const Icon(
+                              Icons.event_available_outlined,
+                              color: LifeVaultColors.primary,
+                            ),
                             title: Text(
                               '${deadline.kind.displayName}: '
                               '${deadline.dateIso}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             subtitle: Text(evidenceText),
                             trailing: OutlinedButton(
                               onPressed: () {
-                                controller.scheduleReminderForDeadline(
+                                widget.controller.scheduleReminderForDeadline(
                                   deadline,
                                 );
                               },

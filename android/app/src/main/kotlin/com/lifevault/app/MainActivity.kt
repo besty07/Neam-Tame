@@ -6,7 +6,8 @@ import io.flutter.embedding.engine.FlutterEngine
 /**
  * MainActivity owned by Developer 4 (Integration Lead).
  *
- * Registers Developer 1's [LifeVaultOcrChannel] on channel `lifevault/ocr`.
+ * Registers Developer 1's `LifeVaultOcrChannel` on channel `lifevault/ocr`
+ * inside [configureFlutterEngine].
  */
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

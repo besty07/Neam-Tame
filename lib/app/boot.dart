@@ -11,11 +11,9 @@ import 'theme.dart';
 
 /// Runtime dependency container composed at startup (`lib/app/boot.dart`).
 ///
-/// Wires real concrete implementations from:
-/// - Developer 1: [OfflineOcrServiceImpl] & [CaptureService]
-/// - Developer 2: [LifeVaultDocumentExtractionService]
-/// - Developer 3: [VaultRepositoryImpl], [QuestionServiceImpl],
-///   [ReminderServiceImpl]
+/// Wires Developer 1 (Offline OCR & Capture), Developer 2 (Classification &
+/// Date Extraction), Developer 3 (SQLite Vault, Grounded Q&A & Reminders),
+/// and Developer 4 (App Controller & Screens).
 class LifeVaultDependencies {
   const LifeVaultDependencies({
     required this.ocrService,
@@ -25,6 +23,7 @@ class LifeVaultDependencies {
     required this.reminderService,
     this.captureDelegate,
     this.nowProvider,
+    this.isPersistentStorage = false,
   });
 
   final OfflineOcrService ocrService;
@@ -34,33 +33,11 @@ class LifeVaultDependencies {
   final ReminderService reminderService;
   final ImageCaptureDelegate? captureDelegate;
   final DateTime Function()? nowProvider;
+  final bool isPersistentStorage;
 
-  /// Production composition connecting D1 OCR/Capture, D2 Extraction, and
-  /// D3 SQLite Vault + Grounded Q&A + Local Notifications.
-  static Future<LifeVaultDependencies> createProduction() async {
-    final vaultRepository = await VaultRepositoryImpl.create();
-    final reminderService = ReminderServiceImpl(repo: vaultRepository);
-    try {
-      await reminderService.initialize();
-    } on Object {
-      // If notification plugin initialization fails on unsupported host,
-      // dashboard reminders still operate locally.
-    }
-    final questionService = IntegratedQuestionService(
-      QuestionServiceImpl(vaultRepository),
-    );
-    return LifeVaultDependencies(
-      ocrService: OfflineOcrServiceImpl(),
-      extractionService: const LifeVaultDocumentExtractionService(),
-      vaultRepository: vaultRepository,
-      questionService: questionService,
-      reminderService: reminderService,
-      captureDelegate: CaptureServiceDelegate(),
-    );
-  }
-
-  /// Synchronous default composition for isolated widget smoke tests where
-  /// host platform channels (`sqflite` / `path_provider`) are not initialized.
+  /// Synchronous default composition for isolated widget tests (`LifeVaultApp()`).
+  /// Uses D1's [OfflineOcrServiceImpl] and D2's pure-Dart
+  /// [LifeVaultDocumentExtractionService] with an in-memory vault repository.
   factory LifeVaultDependencies.createDefault() {
     final repository = InMemoryVaultRepository();
     return LifeVaultDependencies(
@@ -69,8 +46,34 @@ class LifeVaultDependencies {
       vaultRepository: repository,
       questionService: GroundedVaultQuestionService(repository),
       reminderService: const NoOpReminderService(),
-      captureDelegate: CaptureServiceDelegate(),
+      captureDelegate: CaptureServiceImageDelegate(),
+      isPersistentStorage: false,
     );
+  }
+
+  /// Production asynchronous composition connecting D1 native Tesseract OCR,
+  /// D2 keyword/date extraction, and D3 SQLite + app-private file storage +
+  /// Android local notification scheduling.
+  static Future<LifeVaultDependencies> createProduction() async {
+    try {
+      final sqliteRepo = await VaultRepositoryImpl.create();
+      final adapterRepo = ProductionVaultRepositoryAdapter(sqliteRepo);
+      final reminderService = ReminderServiceImpl(repo: sqliteRepo);
+      await reminderService.initialize();
+
+      return LifeVaultDependencies(
+        ocrService: OfflineOcrServiceImpl(),
+        extractionService: const LifeVaultDocumentExtractionService(),
+        vaultRepository: adapterRepo,
+        questionService: GroundedVaultQuestionService(adapterRepo),
+        reminderService: reminderService,
+        captureDelegate: CaptureServiceImageDelegate(),
+        isPersistentStorage: true,
+      );
+    } on Object {
+      // Safe fallback when running on desktop/CI without Android SQLite paths.
+      return LifeVaultDependencies.createDefault();
+    }
   }
 }
 
@@ -107,8 +110,9 @@ class _LifeVaultAppState extends State<LifeVaultApp> {
         vaultRepository: deps.vaultRepository,
         questionService: deps.questionService,
         reminderService: deps.reminderService,
-        captureDelegate: deps.captureDelegate ?? CaptureServiceDelegate(),
+        captureDelegate: deps.captureDelegate ?? CaptureServiceImageDelegate(),
         nowProvider: deps.nowProvider,
+        isPersistentStorage: deps.isPersistentStorage,
       );
       _ownsController = true;
     }
@@ -125,11 +129,18 @@ class _LifeVaultAppState extends State<LifeVaultApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'LifeVault',
-      debugShowCheckedModeBanner: false,
-      theme: LifeVaultTheme.light(),
-      home: AppShellScreen(controller: _controller),
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'LifeVault',
+          debugShowCheckedModeBanner: false,
+          theme: LifeVaultTheme.light(),
+          darkTheme: LifeVaultTheme.dark(),
+          themeMode: _controller.themeMode,
+          home: AppShellScreen(controller: _controller),
+        );
+      },
     );
   }
 }
