@@ -37,7 +37,15 @@ class LifeVaultLlmChannel(
 
     companion object {
         const val CHANNEL_NAME = "lifevault/llm"
-        private const val MODEL_FILENAME = "qwen-0.6b.gguf"
+        private val MODEL_CANDIDATES = listOf(
+            "gemma-2b.gguf",
+            "gemma-2b-it.gguf",
+            "gemma-2-2b-it.gguf",
+            "gemma.gguf",
+            "qwen-0.6b.gguf",
+            "qwen-0.5b.gguf",
+            "model.gguf"
+        )
         private const val MIN_VALID_GGUF_BYTES = 16L
 
         @JvmStatic
@@ -110,7 +118,7 @@ class LifeVaultLlmChannel(
                 "text" to "",
                 "processingMs" to (SystemClock.elapsedRealtime() - startMs).toInt(),
                 "errorCode" to "MODEL_NOT_STAGED",
-                "errorMessage" to "Qwen-0.6B GGUF weights not staged on device; using deterministic offline playbook."
+                "errorMessage" to "Gemma / Qwen GGUF weights not staged on device; using deterministic offline playbook."
             )
         }
 
@@ -152,7 +160,7 @@ class LifeVaultLlmChannel(
 
         return mapOf(
             "text" to generatedBullets,
-            "summary" to "Generated offline on-device by Qwen-0.6B (${modelFile.name}) for $title.",
+            "summary" to "Generated offline on-device by ${modelFile.nameWithoutExtension.uppercase()} for $title.",
             "processingMs" to (SystemClock.elapsedRealtime() - startMs).toInt(),
             "errorCode" to null,
             "errorMessage" to null
@@ -165,56 +173,70 @@ class LifeVaultLlmChannel(
         if (!internalModelsDir.exists()) {
             internalModelsDir.mkdirs()
         }
-        val stagedFile = File(internalModelsDir, MODEL_FILENAME)
-        if (stagedFile.exists() && stagedFile.length() >= MIN_VALID_GGUF_BYTES) {
-            return stagedFile
+
+        // 1. Check internal storage for any candidate model
+        for (name in MODEL_CANDIDATES) {
+            val stagedFile = File(internalModelsDir, name)
+            if (stagedFile.exists() && stagedFile.length() >= MIN_VALID_GGUF_BYTES && hasValidGgufMagic(stagedFile)) {
+                return stagedFile
+            }
         }
 
-        val flutterModelsFile = File(context.dataDir, "app_flutter/models/$MODEL_FILENAME")
-        if (flutterModelsFile.exists() && flutterModelsFile.length() >= MIN_VALID_GGUF_BYTES) {
-            return flutterModelsFile
+        // 2. Check Flutter data dir
+        for (name in MODEL_CANDIDATES) {
+            val flutterModelsFile = File(context.dataDir, "app_flutter/models/$name")
+            if (flutterModelsFile.exists() && flutterModelsFile.length() >= MIN_VALID_GGUF_BYTES && hasValidGgufMagic(flutterModelsFile)) {
+                return flutterModelsFile
+            }
         }
 
-        val adbDownloadFile = File("/sdcard/Download/$MODEL_FILENAME")
-        if (adbDownloadFile.exists() && adbDownloadFile.canRead() &&
-            adbDownloadFile.length() >= MIN_VALID_GGUF_BYTES
-        ) {
-            return adbDownloadFile
+        // 3. Check ADB download directory
+        for (name in MODEL_CANDIDATES) {
+            val adbDownloadFile = File("/sdcard/Download/$name")
+            if (adbDownloadFile.exists() && adbDownloadFile.canRead() &&
+                adbDownloadFile.length() >= MIN_VALID_GGUF_BYTES && hasValidGgufMagic(adbDownloadFile)
+            ) {
+                return adbDownloadFile
+            }
         }
 
-        val assetCandidates = listOfNotNull(
-            try {
-                FlutterInjector.instance().flutterLoader()
-                    .getLookupKeyForAsset("assets/models/$MODEL_FILENAME")
-            } catch (ignored: Exception) {
-                null
-            },
-            "flutter_assets/assets/models/$MODEL_FILENAME",
-            "assets/models/$MODEL_FILENAME"
-        )
+        // 4. Check APK assets
+        for (name in MODEL_CANDIDATES) {
+            val assetCandidates = listOfNotNull(
+                try {
+                    FlutterInjector.instance().flutterLoader()
+                        .getLookupKeyForAsset("assets/models/$name")
+                } catch (ignored: Exception) {
+                    null
+                },
+                "flutter_assets/assets/models/$name",
+                "assets/models/$name"
+            )
 
-        for (candidate in assetCandidates) {
-            try {
-                context.assets.open(candidate).use { input ->
-                    val tempFile = File(internalModelsDir, "$MODEL_FILENAME.tmp")
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
-                    }
-                    if (tempFile.length() >= MIN_VALID_GGUF_BYTES) {
-                        if (stagedFile.exists()) {
-                            stagedFile.delete()
+            for (candidate in assetCandidates) {
+                try {
+                    context.assets.open(candidate).use { input ->
+                        val stagedFile = File(internalModelsDir, name)
+                        val tempFile = File(internalModelsDir, "$name.tmp")
+                        FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output)
                         }
-                        if (!tempFile.renameTo(stagedFile)) {
-                            tempFile.copyTo(stagedFile, overwrite = true)
+                        if (tempFile.length() >= MIN_VALID_GGUF_BYTES && hasValidGgufMagic(tempFile)) {
+                            if (stagedFile.exists()) {
+                                stagedFile.delete()
+                            }
+                            if (!tempFile.renameTo(stagedFile)) {
+                                tempFile.copyTo(stagedFile, overwrite = true)
+                                tempFile.delete()
+                            }
+                            return stagedFile
+                        } else {
                             tempFile.delete()
                         }
-                        return stagedFile
-                    } else {
-                        tempFile.delete()
                     }
+                } catch (ignored: IOException) {
+                    // Continue checking other candidates
                 }
-            } catch (ignored: IOException) {
-                // Asset not packaged in this APK build; continue checking.
             }
         }
 
