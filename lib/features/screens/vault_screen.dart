@@ -144,9 +144,8 @@ class _VaultScreenState extends State<VaultScreen> {
                     label: Text(category.displayName),
                     selected: selectedCategory == category,
                     onSelected: (_) {
-                      final next = selectedCategory == category
-                          ? null
-                          : category;
+                      final next =
+                          selectedCategory == category ? null : category;
                       widget.controller.setCategoryFilter(next);
                     },
                   ),

@@ -47,8 +47,8 @@ class AppShellScreen extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(
             title: Text(_tabTitles[tabIndex]),
-            actions: <Widget>[
-              const Padding(
+            actions: const <Widget>[
+              Padding(
                 padding: EdgeInsets.only(right: 12),
                 child: Chip(
                   avatar: Icon(Icons.airplanemode_active, size: 16),

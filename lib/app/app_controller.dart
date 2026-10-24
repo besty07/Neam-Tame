@@ -237,8 +237,7 @@ class LifeVaultController extends ChangeNotifier {
       }
       await _handlePickedImage(picked);
     } on Object catch (error) {
-      _scanErrorMessage =
-          'Camera capture unavailable ($error). '
+      _scanErrorMessage = 'Camera capture unavailable ($error). '
           'You can choose from gallery or enter details manually.';
       notifyListeners();
     }
@@ -254,8 +253,7 @@ class LifeVaultController extends ChangeNotifier {
       }
       await _handlePickedImage(picked);
     } on Object catch (error) {
-      _scanErrorMessage =
-          'Gallery selection failed ($error). '
+      _scanErrorMessage = 'Gallery selection failed ($error). '
           'You can retry or enter details manually.';
       notifyListeners();
     }
@@ -328,8 +326,7 @@ class LifeVaultController extends ChangeNotifier {
       }
 
       if (!ocrOutput.isSuccess || ocrOutput.text.trim().isEmpty) {
-        final fallbackNotice =
-            ocrOutput.errorMessage ??
+        final fallbackNotice = ocrOutput.errorMessage ??
             'No printed text recognized. Enter fields manually in Review.';
         _isProcessingScan = false;
         notifyListeners();
@@ -374,17 +371,15 @@ class LifeVaultController extends ChangeNotifier {
     return PendingReviewDraft(
       imagePath: picked?.path ?? 'manual_entry_local',
       sha256:
-          picked?.sha256 ??
-          'manual_${_nowProvider().millisecondsSinceEpoch}',
+          picked?.sha256 ?? 'manual_${_nowProvider().millisecondsSinceEpoch}',
       ocrStatus: OcrStatus.manual,
       extractionResult: const ExtractionResult(),
     );
   }
 
   PendingReviewDraft createEditDraft(DocumentRecord document) {
-    final docDeadlines = _verifiedDeadlines
-        .where((d) => d.documentId == document.id)
-        .toList();
+    final docDeadlines =
+        _verifiedDeadlines.where((d) => d.documentId == document.id).toList();
     return PendingReviewDraft(
       imagePath: document.originalPath,
       sha256: document.sha256,
@@ -419,13 +414,11 @@ class LifeVaultController extends ChangeNotifier {
         savedDeadlines.first,
       );
       if (!scheduleResult.permissionGranted) {
-        _statusBannerMessage =
-            scheduleResult.statusMessage ??
+        _statusBannerMessage = scheduleResult.statusMessage ??
             'Saved to vault. Android notification permission is denied, so '
                 'check the Home dashboard for deadline alerts.';
       } else {
-        _statusBannerMessage =
-            scheduleResult.statusMessage ??
+        _statusBannerMessage = scheduleResult.statusMessage ??
             'Document and verified deadline reminder saved locally.';
       }
     } else {
@@ -444,13 +437,11 @@ class LifeVaultController extends ChangeNotifier {
   ) async {
     final result = await reminderService.schedule(deadline);
     if (!result.permissionGranted) {
-      _statusBannerMessage =
-          result.statusMessage ??
+      _statusBannerMessage = result.statusMessage ??
           'Notification permission denied by Android. Deadline remains '
               'tracked on Home dashboard.';
     } else {
-      _statusBannerMessage =
-          result.statusMessage ??
+      _statusBannerMessage = result.statusMessage ??
           'Local notification scheduled for ${deadline.dateIso}.';
     }
     notifyListeners();
@@ -486,8 +477,6 @@ class LifeVaultController extends ChangeNotifier {
   }
 
   List<DeadlineRecord> deadlinesForDocument(String documentId) {
-    return _verifiedDeadlines
-        .where((d) => d.documentId == documentId)
-        .toList();
+    return _verifiedDeadlines.where((d) => d.documentId == documentId).toList();
   }
 }

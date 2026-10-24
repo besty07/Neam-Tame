@@ -198,8 +198,7 @@ class DocumentDetailScreen extends StatelessWidget {
                               'Confirmed manually (p.$pageNum)';
                           if (deadline.evidenceSnippet != null &&
                               deadline.evidenceSnippet!.isNotEmpty) {
-                            evidenceText =
-                                'Evidence (p.$pageNum): '
+                            evidenceText = 'Evidence (p.$pageNum): '
                                 '"${deadline.evidenceSnippet}"';
                           }
                           return ListTile(

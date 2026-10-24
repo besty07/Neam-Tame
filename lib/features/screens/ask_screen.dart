@@ -126,9 +126,8 @@ class _AskScreenState extends State<AskScreen> {
                     return ActionChip(
                       key: Key('ask_chip_$chipText'),
                       label: Text(chipText),
-                      onPressed: isAnswering
-                          ? null
-                          : () => _submitQuestion(chipText),
+                      onPressed:
+                          isAnswering ? null : () => _submitQuestion(chipText),
                     );
                   }).toList(),
                 ),
@@ -152,8 +151,7 @@ class _AskScreenState extends State<AskScreen> {
 
   Widget _buildAnswerCard(BuildContext context, AnswerResult answer) {
     final statusLabel = answer.status.wireName.toUpperCase();
-    final isUnsupportedOrMissing =
-        answer.status == AnswerStatus.notFound ||
+    final isUnsupportedOrMissing = answer.status == AnswerStatus.notFound ||
         answer.status == AnswerStatus.unsupportedQuestion;
 
     return Card(
@@ -214,8 +212,7 @@ class _AskScreenState extends State<AskScreen> {
                 final title = doc?.title ?? 'Document $docId';
                 String subtitle = 'Document ID: $docId';
                 if (doc != null) {
-                  subtitle =
-                      '${doc.category.displayName} • '
+                  subtitle = '${doc.category.displayName} • '
                       '${doc.documentType.displayName}';
                 }
                 Widget trailingButton = OutlinedButton(

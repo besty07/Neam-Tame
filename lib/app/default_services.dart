@@ -127,8 +127,7 @@ class MethodChannelOfflineOcrService implements OfflineOcrService {
       return const OcrOutput(
         text: '',
         errorCode: 'MODEL_MISSING',
-        errorMessage:
-            'Offline OCR engine is not registered yet. '
+        errorMessage: 'Offline OCR engine is not registered yet. '
             'You can still enter document details manually.',
       );
     } on PlatformException catch (error) {
@@ -288,27 +287,22 @@ class GroundedVaultQuestionService implements QuestionService {
     if (normalized.isEmpty) {
       return const AnswerResult(
         status: AnswerStatus.unsupportedQuestion,
-        text:
-            'Enter a question about an expiry date, bill due date, '
+        text: 'Enter a question about an expiry date, bill due date, '
             'or saved household document.',
       );
     }
 
-    final isUpcomingQuery =
-        normalized.contains('upcoming') ||
+    final isUpcomingQuery = normalized.contains('upcoming') ||
         normalized.contains('due soon') ||
         normalized.contains('next deadline');
-    final isExpiryQuery =
-        normalized.contains('expir') ||
+    final isExpiryQuery = normalized.contains('expir') ||
         normalized.contains('warranty') ||
         normalized.contains('valid') ||
         normalized.contains('policy');
-    final isDueQuery =
-        normalized.contains('due') ||
+    final isDueQuery = normalized.contains('due') ||
         normalized.contains('bill') ||
         normalized.contains('pay');
-    final isFindQuery =
-        normalized.contains('find') ||
+    final isFindQuery = normalized.contains('find') ||
         normalized.contains('where') ||
         normalized.contains('show') ||
         normalized.contains('do i have');
@@ -316,8 +310,7 @@ class GroundedVaultQuestionService implements QuestionService {
     if (!isUpcomingQuery && !isExpiryQuery && !isDueQuery && !isFindQuery) {
       return const AnswerResult(
         status: AnswerStatus.unsupportedQuestion,
-        text:
-            'LifeVault only answers grounded questions about expiry dates, '
+        text: 'LifeVault only answers grounded questions about expiry dates, '
             'bill due dates, upcoming deadlines, or finding saved documents.',
       );
     }
@@ -337,14 +330,11 @@ class GroundedVaultQuestionService implements QuestionService {
       final first = verifiedDeadlines.first;
       final doc = allDocs.where((d) => d.id == first.documentId).firstOrNull;
       final docTitle = doc?.title ?? 'Document';
-      final upcomingDocIds = verifiedDeadlines
-          .map((d) => d.documentId)
-          .toSet()
-          .toList();
+      final upcomingDocIds =
+          verifiedDeadlines.map((d) => d.documentId).toSet().toList();
       return AnswerResult(
         status: AnswerStatus.answered,
-        text:
-            '$docTitle (${first.kind.displayName}) is due on '
+        text: '$docTitle (${first.kind.displayName}) is due on '
             '${first.dateIso}.',
         documentIds: upcomingDocIds,
         deadlineIds: verifiedDeadlines.map((d) => d.id).toList(),
@@ -416,8 +406,7 @@ class GroundedVaultQuestionService implements QuestionService {
     if (matchingDocs.length > 1) {
       return AnswerResult(
         status: AnswerStatus.multipleMatches,
-        text:
-            'Found ${matchingDocs.length} matching records. '
+        text: 'Found ${matchingDocs.length} matching records. '
             'Select a document below to view its verified date and source.',
         documentIds: matchingDocs.map((d) => d.id).toList(),
       );
@@ -427,16 +416,14 @@ class GroundedVaultQuestionService implements QuestionService {
     if (!matchedDoc.verificationStatus.isUserVerified) {
       return AnswerResult(
         status: AnswerStatus.unverified,
-        text:
-            '"${matchedDoc.title}" is saved, but its dates have not been '
+        text: '"${matchedDoc.title}" is saved, but its dates have not been '
             'verified by you yet. Please review and confirm the document.',
         documentIds: <String>[matchedDoc.id],
       );
     }
 
-    final docDeadlines = verifiedDeadlines
-        .where((d) => d.documentId == matchedDoc.id)
-        .toList();
+    final docDeadlines =
+        verifiedDeadlines.where((d) => d.documentId == matchedDoc.id).toList();
 
     if (isFindQuery && !isExpiryQuery && !isDueQuery) {
       String deadlineNote = 'No deadline attached.';
@@ -449,8 +436,7 @@ class GroundedVaultQuestionService implements QuestionService {
       }
       return AnswerResult(
         status: AnswerStatus.answered,
-        text:
-            'Found "${matchedDoc.title}" under '
+        text: 'Found "${matchedDoc.title}" under '
             '${matchedDoc.category.displayName}. $deadlineNote',
         documentIds: <String>[matchedDoc.id],
         deadlineIds: docDeadlines.map((d) => d.id).toList(),
@@ -462,8 +448,7 @@ class GroundedVaultQuestionService implements QuestionService {
     if (docDeadlines.isEmpty) {
       return AnswerResult(
         status: AnswerStatus.unverified,
-        text:
-            '"${matchedDoc.title}" does not have a confirmed deadline date '
+        text: '"${matchedDoc.title}" does not have a confirmed deadline date '
             'recorded.',
         documentIds: <String>[matchedDoc.id],
       );
@@ -472,8 +457,7 @@ class GroundedVaultQuestionService implements QuestionService {
     final deadline = docDeadlines.first;
     return AnswerResult(
       status: AnswerStatus.answered,
-      text:
-          '${matchedDoc.title} (${deadline.kind.displayName}): '
+      text: '${matchedDoc.title} (${deadline.kind.displayName}): '
           '${deadline.dateIso}.',
       documentIds: <String>[matchedDoc.id],
       deadlineIds: <String>[deadline.id],
