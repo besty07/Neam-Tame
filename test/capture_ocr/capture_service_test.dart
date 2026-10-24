@@ -63,20 +63,25 @@ void main() {
 
     test('captureFromCamera returns null when user cancels', () async {
       fakePicker.nextImage = null;
-      final CapturedImageResult? result = await captureService.captureFromCamera();
+      final CapturedImageResult? result =
+          await captureService.captureFromCamera();
       expect(result, isNull);
     });
 
     test('pickFromGallery returns null when user cancels', () async {
       fakePicker.nextImage = null;
-      final CapturedImageResult? result = await captureService.pickFromGallery();
+      final CapturedImageResult? result =
+          await captureService.pickFromGallery();
       expect(result, isNull);
     });
 
-    test('captureFromCamera validates and returns CapturedImageResult on success', () async {
+    test(
+        'captureFromCamera validates and returns CapturedImageResult on success',
+        () async {
       fakePicker.nextImage = XFile(validImage.path);
 
-      final CapturedImageResult? result = await captureService.captureFromCamera();
+      final CapturedImageResult? result =
+          await captureService.captureFromCamera();
 
       expect(result, isNotNull);
       expect(result!.filePath, validImage.path);
@@ -85,19 +90,23 @@ void main() {
       expect(result.wasRecoveredFromCrash, isFalse);
     });
 
-    test('retrieveLostData returns null when no crash data is present', () async {
+    test('retrieveLostData returns null when no crash data is present',
+        () async {
       fakePicker.nextLostData = LostDataResponse.empty();
 
-      final CapturedImageResult? result = await captureService.retrieveLostData();
+      final CapturedImageResult? result =
+          await captureService.retrieveLostData();
       expect(result, isNull);
     });
 
-    test('retrieveLostData recovers image when crash data is present', () async {
+    test('retrieveLostData recovers image when crash data is present',
+        () async {
       fakePicker.nextLostData = LostDataResponse(
         file: XFile(validImage.path),
       );
 
-      final CapturedImageResult? result = await captureService.retrieveLostData();
+      final CapturedImageResult? result =
+          await captureService.retrieveLostData();
 
       expect(result, isNotNull);
       expect(result!.filePath, validImage.path);

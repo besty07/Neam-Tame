@@ -6,8 +6,11 @@
         android:name="android.permission.INTERNET"
         tools:node="remove" />
 
-    <!-- Android 13+ local notification permission for deadline reminders -->
+    <!-- D3: Android 13+ local notification permission for deadline reminders -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- D3: Required by flutter_local_notifications for rescheduling after reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="LifeVault"
@@ -31,6 +34,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- D3: Local notification receivers (flutter_local_notifications v17+) -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

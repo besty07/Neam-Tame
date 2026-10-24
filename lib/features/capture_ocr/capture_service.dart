@@ -117,7 +117,8 @@ class CaptureService {
     }
 
     final Directory appDir = await getApplicationDocumentsDirectory();
-    final Directory vaultDir = Directory(p.join(appDir.path, 'vault_documents'));
+    final Directory vaultDir =
+        Directory(p.join(appDir.path, 'vault_documents'));
     if (!vaultDir.existsSync()) {
       await vaultDir.create(recursive: true);
     }
